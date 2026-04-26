@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CategoriesModule } from './categories/categories.module';
 import { MaterialsModule } from './materials/materials.module';
@@ -10,21 +11,39 @@ import { CartModule } from './cart/cart.module';
 import { ProfileModule } from './profile/profile.module';
 import { MyDesignsModule } from './my-designs/my-designs.module';
 
+function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
+  const hasRemoteConfig = Boolean(config.get<string>('REMOTE_DB_HOST'));
+  const type = config.get<'postgres' | 'mysql'>(
+    'DB_TYPE',
+    config.get<'postgres' | 'mysql'>('REMOTE_DB_TYPE', hasRemoteConfig ? 'mysql' : 'postgres'),
+  );
+  const host = config.get<string>('DB_HOST', config.get<string>('REMOTE_DB_HOST', 'localhost'));
+  const port = Number(
+    config.get<string | number>('DB_PORT', config.get<string | number>('REMOTE_DB_PORT', type === 'mysql' ? 3306 : 5432)),
+  );
+  const username = config.get<string>('DB_USERNAME', config.get<string>('REMOTE_DB_USERNAME', type === 'mysql' ? 'root' : 'postgres'));
+  const password = config.get<string>('DB_PASSWORD', config.get<string>('REMOTE_DB_PASSWORD', type === 'mysql' ? '' : 'postgres'));
+  const database = config.get<string>('DB_DATABASE', config.get<string>('REMOTE_DB_DATABASE', 'diy_bracelets'));
+
+  return {
+    type,
+    host,
+    port,
+    username,
+    password,
+    database,
+    entities: [__dirname + '/**/*.entity{.ts,.js}'],
+    synchronize: config.get('NODE_ENV') !== 'production',
+    logging: config.get('NODE_ENV') === 'development',
+    charset: type === 'mysql' ? 'utf8mb4' : undefined,
+  };
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get('DB_HOST', 'localhost'),
-        port: config.get('DB_PORT', 5432),
-        username: config.get('DB_USERNAME', 'postgres'),
-        password: config.get('DB_PASSWORD', 'postgres'),
-        database: config.get('DB_DATABASE', 'diy_bracelets'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: config.get('NODE_ENV') !== 'production',
-        logging: config.get('NODE_ENV') === 'development',
-      }),
+      useFactory: getDatabaseConfig,
       inject: [ConfigService],
     }),
     CategoriesModule,
