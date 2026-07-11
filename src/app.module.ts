@@ -10,9 +10,22 @@ import { GoodsModule } from './goods/goods.module';
 import { CartModule } from './cart/cart.module';
 import { ProfileModule } from './profile/profile.module';
 import { MyDesignsModule } from './my-designs/my-designs.module';
+import { ContentModule } from './content/content.module';
 
 function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const hasRemoteConfig = Boolean(config.get<string>('REMOTE_DB_HOST'));
+  const hasDbHost = Boolean(config.get<string>('DB_HOST'));
+  const databasePath = config.get<string>('DATABASE_PATH');
+  if (!hasDbHost && !hasRemoteConfig && databasePath) {
+    return {
+      type: 'sqlite',
+      database: databasePath,
+      entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      synchronize: config.get('NODE_ENV') !== 'production',
+      logging: config.get('NODE_ENV') === 'development',
+    };
+  }
+
   const type = config.get<'postgres' | 'mysql'>(
     'DB_TYPE',
     config.get<'postgres' | 'mysql'>('REMOTE_DB_TYPE', hasRemoteConfig ? 'mysql' : 'postgres'),
@@ -54,6 +67,7 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
     CartModule,
     ProfileModule,
     MyDesignsModule,
+    ContentModule,
   ],
 })
 export class AppModule {}

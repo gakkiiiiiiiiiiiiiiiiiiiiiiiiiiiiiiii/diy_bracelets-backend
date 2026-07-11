@@ -5,7 +5,7 @@ export class ProfileService {
   getProfile() {
     return {
       name: 'Gakkiiiiiiiiiiiiiii',
-      greeting: '您好！欢迎来到养个石头',
+      greeting: '您好！欢迎来到珠岛',
       entries: [
         { id: 'design', label: '我的设计', sub: '查看已保存的设计记录', icon: 'D' },
         { id: 'orders', label: '我的订单', sub: '定制记录、购买记录', icon: 'O' },
