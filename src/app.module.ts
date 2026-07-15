@@ -11,6 +11,10 @@ import { CartModule } from './cart/cart.module';
 import { ProfileModule } from './profile/profile.module';
 import { MyDesignsModule } from './my-designs/my-designs.module';
 import { ContentModule } from './content/content.module';
+import { AiModule } from './ai/ai.module';
+import { ExtractionModule } from './extraction/extraction.module';
+import { BraceletCodeModule } from './bracelet-code/bracelet-code.module';
+import { BraceletAgentModule } from './bracelet-agent/bracelet-agent.module';
 
 function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const hasRemoteConfig = Boolean(config.get<string>('REMOTE_DB_HOST'));
@@ -68,6 +72,10 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
     ProfileModule,
     MyDesignsModule,
     ContentModule,
+    AiModule,
+    ExtractionModule,
+    BraceletCodeModule,
+    BraceletAgentModule,
   ],
 })
 export class AppModule {}

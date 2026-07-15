@@ -55,6 +55,9 @@ export class DesignsService {
       images: dto.images ?? null,
       usageCount: 0,
       composition,
+      orderedBeads: dto.orderedBeads ?? null,
+      wristCm: dto.wristCm ?? null,
+      braceletCode: dto.braceletCode ?? null,
     });
     return this.repo.save(entity);
   }
@@ -74,6 +77,9 @@ export class DesignsService {
         amount: c.price * c.quantity,
       }));
     }
+    if (dto.orderedBeads) payload.orderedBeads = dto.orderedBeads;
+    if (dto.wristCm !== undefined) payload.wristCm = dto.wristCm;
+    if (dto.braceletCode !== undefined) payload.braceletCode = dto.braceletCode;
     await this.repo.update(id, payload);
     return this.findOne(id);
   }

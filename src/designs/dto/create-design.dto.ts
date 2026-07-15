@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsArray, IsNumber, IsIn, Min } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNumber, IsIn, Min, Max, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class DesignCompositionDto {
   @IsString()
@@ -23,6 +24,11 @@ export class DesignCompositionDto {
   quantity: number;
 }
 
+export class OrderedDesignBeadDto {
+  @IsString() materialId: string;
+  @IsString() specId: string;
+}
+
 export class CreateDesignDto {
   @IsIn(['designer', 'user'])
   source: 'designer' | 'user' = 'designer';
@@ -44,4 +50,20 @@ export class CreateDesignDto {
 
   @IsArray()
   composition: DesignCompositionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderedDesignBeadDto)
+  orderedBeads?: OrderedDesignBeadDto[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(8)
+  @Max(40)
+  wristCm?: number;
+
+  @IsOptional()
+  @IsString()
+  braceletCode?: string;
 }

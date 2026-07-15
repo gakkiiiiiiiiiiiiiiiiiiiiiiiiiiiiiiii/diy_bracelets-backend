@@ -25,6 +25,48 @@ export class Material {
   @Column('simple-json')
   specs: MaterialSpecEmbed[];
 
+  @Column({ type: 'varchar', length: 20, default: 'published' })
+  status: 'published' | 'disabled';
+
+  @Column({ default: true })
+  isAvailable: boolean;
+
+  @Column({ default: '' })
+  crystalFamily: string;
+
+  @Column('simple-json', { nullable: true })
+  aliases: string[] | null;
+
+  @Column('simple-json', { nullable: true })
+  dominantColors: string[] | null;
+
+  @Column({ default: '' })
+  transparency: string;
+
+  @Column({ default: '' })
+  pattern: string;
+
+  @Column({ default: '' })
+  inclusions: string;
+
+  @Column('simple-json', { nullable: true })
+  sourceRefs: string[] | null;
+
+  @Column('simple-json', { nullable: true })
+  confidence: Record<string, number> | null;
+
+  @Column({ type: 'varchar', length: 20, default: 'manual' })
+  generatedBy: 'imagegen' | 'manual';
+
+  @Column('simple-json', { nullable: true })
+  manualOverrides: string[] | null;
+
+  @Column('simple-json', { nullable: true })
+  embedding: number[] | null;
+
+  @Column('simple-json', { nullable: true })
+  assetBundle: Record<string, string> | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

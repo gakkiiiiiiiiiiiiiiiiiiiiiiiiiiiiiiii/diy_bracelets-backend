@@ -4,6 +4,7 @@
 	"private": true,
 	"scripts": {
 		"build": "nest build",
+		"test": "npm run build && node --test test/*.test.cjs",
 		"dev": "nest start",
 		"import:textures": "node scripts/import-static-textures.mjs",
 		"start:dev": "nest start --watch",
@@ -24,6 +25,7 @@
 		"pg": "^8.11.3",
 		"reflect-metadata": "^0.2.1",
 		"rxjs": "^7.8.1",
+		"sharp": "^0.35.3",
 		"sqlite3": "^5.1.7",
 		"typeorm": "^0.3.19"
 	},

@@ -54,12 +54,24 @@ docker compose up -d
 | `DB_PASSWORD` | postgres | 密码 |
 | `DB_DATABASE` | diy_bracelets | 数据库名 |
 | `PORT` | 3000 | API 端口 |
+| `OPENAI_API_KEY` | - | 水晶识别、Imagegen 提取与图片参考搭配所需密钥 |
+| `OPENAI_VISION_MODEL` | gpt-5-mini | 视觉识别与结构化搭配模型 |
+| `OPENAI_IMAGE_MODEL` | gpt-image-2 | 单颗水晶珠提取模型 |
+| `OPENAI_EMBEDDING_MODEL` | text-embedding-3-small | 素材视觉语义去重模型 |
+| `EXTRACTION_SOURCE_DIR` | ../downloads/douyin-wufang-bracelets/carousel-originals | 已爬取轮播原图目录 |
+| `EXTRACTION_OUTPUT_DIR` | ./uploads/extractions | 可追溯提取产物目录 |
 
 ## API
 
 - 分类：`GET/POST/PATCH/DELETE /api/categories`
 - 材料：`GET/POST/PATCH/DELETE /api/materials`
 - 上传：`POST /api/materials/upload`（form-data 字段 `file`）
+- 提取任务：`POST /api/admin/extraction-jobs`、`GET /api/admin/extraction-jobs/:id`
+- 提取结果：`GET /api/admin/extraction-results`、`POST /api/admin/extraction-results/:id/retry`
+- 搭配 Agent：`POST /api/admin/agent/generations`、`GET /api/admin/agent/generations/:id`
+- 手串代码：`POST /api/bracelet-code/encode`、`POST /api/bracelet-code/resolve`
+
+未配置 `OPENAI_API_KEY` 时，Imagegen 提取任务会以明确错误结束且不会发布素材；颜色搭配仍可通过本地确定性回退生成三套仅引用已发布素材的方案。
 
 ## 微信云托管部署
 

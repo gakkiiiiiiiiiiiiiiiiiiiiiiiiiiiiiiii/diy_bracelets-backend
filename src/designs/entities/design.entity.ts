@@ -41,6 +41,16 @@ export class Design {
   @Column('simple-json')
   composition: DesignCompositionEmbed[];
 
+  /** 可精确复现的有序珠子序列；旧设计可为空 */
+  @Column('simple-json', { nullable: true })
+  orderedBeads: Array<{ materialId: string; specId: string }> | null;
+
+  @Column({ type: 'float', nullable: true })
+  wristCm: number | null;
+
+  @Column({ type: 'text', nullable: true })
+  braceletCode: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
