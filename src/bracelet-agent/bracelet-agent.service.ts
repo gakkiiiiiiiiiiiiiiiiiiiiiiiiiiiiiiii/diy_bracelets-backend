@@ -1,9 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GeneratedBraceletCandidate } from '../ai/ai.types';
 import { ImageAssetsService } from '../ai/image-assets.service';
-import { OpenAiProviderService } from '../ai/openai-provider.service';
+import { CodexCliProviderService } from '../ai/codex-cli-provider.service';
 import { BraceletCodeService } from '../bracelet-code/bracelet-code.service';
 import { Material } from '../materials/entities/material.entity';
 import { MaterialsService } from '../materials/materials.service';
@@ -22,7 +22,7 @@ export class BraceletAgentService implements OnModuleInit {
     @InjectRepository(AgentGeneration) private readonly generations: Repository<AgentGeneration>,
     @InjectRepository(AgentFeedback) private readonly feedback: Repository<AgentFeedback>,
     private readonly materials: MaterialsService,
-    private readonly ai: OpenAiProviderService,
+    private readonly ai: CodexCliProviderService,
     private readonly images: ImageAssetsService,
     private readonly code: BraceletCodeService,
     private readonly renderer: BraceletRenderService,
@@ -35,6 +35,7 @@ export class BraceletAgentService implements OnModuleInit {
 
   async create(dto: CreateAgentGenerationDto): Promise<AgentGeneration> {
     if (!dto.referenceImage && !dto.colors?.length) throw new BadRequestException('请上传参考图片或至少选择一种颜色');
+    if (!this.ai.configured) throw new ServiceUnavailableException('本地 Codex CLI 不可用，请检查 CODEX_CLI_PATH');
     const row = await this.generations.save(this.generations.create({
       status: 'queued', input: { colors: dto.colors || [], referenceImage: dto.referenceImage, wristCm: dto.wristCm || 16 }, candidates: null,
     }));
@@ -47,6 +48,8 @@ export class BraceletAgentService implements OnModuleInit {
     if (!row) throw new NotFoundException('搭配任务不存在');
     return row;
   }
+
+  providerStatus() { return this.ai.status(); }
 
   private schedule(id: string): void { this.queue = this.queue.then(() => this.process(id)).catch((error) => this.logger.error(error)); }
 
@@ -110,7 +113,7 @@ export class BraceletAgentService implements OnModuleInit {
     const row = await this.findOne(id);
     try {
       let colors = [...row.input.colors];
-      if (row.input.referenceImage && this.ai.configured) {
+      if (row.input.referenceImage) {
         row.status = 'analyzing'; await this.generations.save(row);
         const image = await this.images.load(row.input.referenceImage);
         const description = await this.ai.describeReference(image.buffer, image.mime);
@@ -121,12 +124,9 @@ export class BraceletAgentService implements OnModuleInit {
       if (!inventory.length) throw new Error('没有可用的已发布水晶珠素材');
       const retrieved = this.retrieve(inventory, colors);
       row.status = 'generating'; await this.generations.save(row);
-      let raw: GeneratedBraceletCandidate[] = [];
-      if (this.ai.configured) {
-        raw = await this.ai.generateBracelets({ colors, wristCm: row.input.wristCm, referenceDescription: row.referenceDescription || undefined, inventory: retrieved.map((item) => ({
-          materialId: item.id, name: item.name, colors: item.dominantColors || [], transparency: item.transparency, pattern: item.pattern, specs: item.specs,
-        })) });
-      }
+      const raw = await this.ai.generateBracelets({ colors, wristCm: row.input.wristCm, referenceDescription: row.referenceDescription || undefined, inventory: retrieved.map((item) => ({
+        materialId: item.id, name: item.name, colors: item.dominantColors || [], transparency: item.transparency, pattern: item.pattern, specs: item.specs,
+      })) });
       const fallback = this.heuristic(retrieved, row.input.wristCm);
       const candidates = [...raw.map((item) => this.validateCandidate(item, retrieved, row.input.wristCm)).filter(Boolean), ...fallback]
         .slice(0, 3) as GeneratedBraceletCandidate[];

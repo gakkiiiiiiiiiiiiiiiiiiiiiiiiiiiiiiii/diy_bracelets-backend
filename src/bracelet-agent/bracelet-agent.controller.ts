@@ -5,6 +5,7 @@ import { CreateAgentFeedbackDto, CreateAgentGenerationDto, RenderAgentBraceletDt
 @Controller('api/admin/agent')
 export class BraceletAgentController {
   constructor(private readonly service: BraceletAgentService) {}
+  @Get('provider') provider() { return this.service.providerStatus(); }
   @Post('generations') create(@Body() dto: CreateAgentGenerationDto) { return this.service.create(dto); }
   @Get('generations/:id') findOne(@Param('id') id: string) { return this.service.findOne(id); }
   @Post('feedback') feedback(@Body() dto: CreateAgentFeedbackDto) { return this.service.addFeedback(dto); }
