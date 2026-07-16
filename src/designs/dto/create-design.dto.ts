@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, IsNumber, IsIn, Min, Max, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsBoolean, IsNumber, IsIn, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class DesignCompositionDto {
@@ -66,4 +66,12 @@ export class CreateDesignDto {
   @IsOptional()
   @IsString()
   braceletCode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isInspiration?: boolean;
+
+  @IsOptional()
+  @IsIn(['pending', 'approved', 'rejected'])
+  reviewStatus?: 'pending' | 'approved' | 'rejected';
 }

@@ -8,6 +8,7 @@ import {
 import { DesignCompositionEmbed } from './design-composition.embed';
 
 export type DesignSource = 'designer' | 'user';
+export type DesignReviewStatus = 'pending' | 'approved' | 'rejected';
 
 @Entity('designs')
 export class Design {
@@ -50,6 +51,20 @@ export class Design {
 
   @Column({ type: 'text', nullable: true })
   braceletCode: string | null;
+
+  /** 是否公开到灵感岛；设计库中的草稿可保持 false。 */
+  @Column({ type: 'boolean', default: true })
+  isInspiration: boolean;
+
+  /** 用户投稿需审核，后台/Agent 发布可直接通过。 */
+  @Column({ type: 'varchar', length: 20, default: 'approved' })
+  reviewStatus: DesignReviewStatus;
+
+  @Column({ type: 'text', nullable: true })
+  reviewNote: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  reviewedAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

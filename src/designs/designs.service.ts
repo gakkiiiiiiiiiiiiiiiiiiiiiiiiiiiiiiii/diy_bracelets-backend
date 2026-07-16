@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Design, DesignSource } from './entities/design.entity';
+import { Design, DesignReviewStatus, DesignSource } from './entities/design.entity';
 import { DesignCompositionEmbed } from './entities/design-composition.embed';
 import { CreateDesignDto } from './dto/create-design.dto';
 import { UpdateDesignDto } from './dto/update-design.dto';
@@ -20,6 +20,34 @@ export class DesignsService {
       where,
       order: { usageCount: 'DESC', createdAt: 'DESC' },
     });
+  }
+
+  async findInspirations(status: DesignReviewStatus = 'approved'): Promise<Design[]> {
+    return this.repo.find({
+      where: { isInspiration: true, reviewStatus: status },
+      order: { usageCount: 'DESC', createdAt: 'DESC' },
+    });
+  }
+
+  async findRandomInspiration(): Promise<Design> {
+    const count = await this.repo.count({ where: { isInspiration: true, reviewStatus: 'approved' } });
+    if (!count) throw new NotFoundException('灵感岛暂时还没有可用作品');
+    const [design] = await this.repo.find({
+      where: { isInspiration: true, reviewStatus: 'approved' },
+      order: { createdAt: 'DESC' },
+      skip: Math.floor(Math.random() * count),
+      take: 1,
+    });
+    if (!design) throw new NotFoundException('灵感岛暂时还没有可用作品');
+    return design;
+  }
+
+  async findPublicInspiration(id: string): Promise<Design> {
+    const design = await this.findOne(id);
+    if (!design.isInspiration || design.reviewStatus !== 'approved') {
+      throw new NotFoundException(`Inspiration ${id} not found`);
+    }
+    return design;
   }
 
   /** 设计详情（含构成表） */
@@ -58,6 +86,10 @@ export class DesignsService {
       orderedBeads: dto.orderedBeads ?? null,
       wristCm: dto.wristCm ?? null,
       braceletCode: dto.braceletCode ?? null,
+      isInspiration: dto.isInspiration ?? true,
+      reviewStatus: dto.reviewStatus ?? 'approved',
+      reviewNote: null,
+      reviewedAt: dto.reviewStatus === 'approved' ? new Date() : null,
     });
     return this.repo.save(entity);
   }
@@ -88,5 +120,15 @@ export class DesignsService {
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.repo.delete(id);
+  }
+
+  async review(id: string, status: DesignReviewStatus, note = ''): Promise<Design> {
+    await this.findOne(id);
+    await this.repo.update(id, {
+      reviewStatus: status,
+      reviewNote: note.trim() || null,
+      reviewedAt: new Date(),
+    });
+    return this.findOne(id);
   }
 }

@@ -11,5 +11,6 @@ import { AgentGeneration } from './entities/agent-generation.entity';
 @Module({
   imports: [TypeOrmModule.forFeature([AgentGeneration, AgentFeedback]), MaterialsModule, BraceletCodeModule],
   controllers: [BraceletAgentController], providers: [BraceletAgentService, BraceletRenderService],
+  exports: [BraceletRenderService],
 })
 export class BraceletAgentModule {}

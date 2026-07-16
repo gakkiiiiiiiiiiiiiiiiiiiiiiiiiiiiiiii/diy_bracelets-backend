@@ -15,6 +15,7 @@ import { AiModule } from './ai/ai.module';
 import { ExtractionModule } from './extraction/extraction.module';
 import { BraceletCodeModule } from './bracelet-code/bracelet-code.module';
 import { BraceletAgentModule } from './bracelet-agent/bracelet-agent.module';
+import { InspirationsModule } from './inspirations/inspirations.module';
 
 function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const hasRemoteConfig = Boolean(config.get<string>('REMOTE_DB_HOST'));
@@ -76,6 +77,7 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
     ExtractionModule,
     BraceletCodeModule,
     BraceletAgentModule,
+    InspirationsModule,
   ],
 })
 export class AppModule {}
