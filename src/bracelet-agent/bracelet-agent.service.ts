@@ -49,6 +49,11 @@ export class BraceletAgentService implements OnModuleInit {
     return row;
   }
 
+  list(limit?: string): Promise<AgentGeneration[]> {
+    const take = Math.max(1, Math.min(100, Number.parseInt(limit || '30', 10) || 30));
+    return this.generations.find({ order: { createdAt: 'DESC' }, take });
+  }
+
   providerStatus() { return this.ai.status(); }
 
   private schedule(id: string): void { this.queue = this.queue.then(() => this.process(id)).catch((error) => this.logger.error(error)); }
