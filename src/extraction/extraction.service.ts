@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -37,8 +37,8 @@ export class ExtractionService implements OnModuleInit {
   }
 
   async create(dto: CreateExtractionJobDto): Promise<ExtractionJob> {
-    const sourceRefs = dto.sourceRefs?.filter(Boolean) ?? this.images.listDefaultSources();
-    if (!sourceRefs.length) throw new NotFoundException('没有找到可处理的作品图片');
+    const sourceRefs = dto.sourceRefs?.filter(Boolean) ?? [];
+    if (!sourceRefs.length) throw new BadRequestException('请先上传需要提取的手串图片');
     const job = await this.jobs.save(this.jobs.create({ status: 'queued', sourceRefs, totalSources: sourceRefs.length }));
     this.schedule(job.id);
     return job;
