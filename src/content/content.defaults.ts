@@ -52,8 +52,13 @@ export interface HomeFeaturedSectionContent {
   items: HomeFeaturedItemContent[];
 }
 
+export interface HomeInspirationCarouselContent {
+  designIds: string[];
+}
+
 export interface HomeContent {
   hero: HomeHeroContent;
+  inspirationCarousel: HomeInspirationCarouselContent;
   materials: HomeMaterialSectionContent;
   featured: HomeFeaturedSectionContent;
 }
@@ -160,6 +165,9 @@ export const DEFAULT_PAGE_CONFIGS: DefaultPageConfig[] = [
           label: '开始 3D 设计',
           path: '/pages/design/design',
         },
+      },
+      inspirationCarousel: {
+        designIds: [],
       },
       materials: {
         eyebrow: 'MATERIAL LIBRARY',
