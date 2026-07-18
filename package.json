@@ -5,6 +5,7 @@
 	"scripts": {
 		"build": "nest build",
 		"test": "npm run build && node --test test/*.test.cjs",
+		"rerender:previews": "npm run build && node scripts/rerender-product-images.mjs",
 		"dev": "nest start",
 		"import:textures": "node scripts/import-static-textures.mjs",
 		"start:dev": "nest start --watch",
