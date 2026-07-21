@@ -2,15 +2,12 @@ import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleIni
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { spawn } from 'child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import sharp from 'sharp';
 import { Repository } from 'typeorm';
 import { ImageAssetsService } from '../ai/image-assets.service';
-import { BraceletRenderService } from '../bracelet-agent/bracelet-render.service';
-import { Material } from '../materials/entities/material.entity';
-import { MaterialsService } from '../materials/materials.service';
-import { CreateDesignProcessVideoDto, DesignProcessBeadDto, DesignProcessPaletteItemDto, DesignProcessStepDto } from './dto/design-process-video.dto';
+import { CreateDesignProcessVideoDto, DesignProcessPaletteItemDto, DesignProcessStepDto } from './dto/design-process-video.dto';
 import { DesignProcessVideo } from './entities/design-process-video.entity';
 
 const WIDTH = 720;
@@ -38,17 +35,19 @@ export class DesignProcessVideosService implements OnModuleInit {
   private readonly logger = new Logger(DesignProcessVideosService.name);
   private readonly outputDir: string;
   private readonly ffmpegPath: string;
+  private readonly chromePath: string;
+  private readonly webRenderUrl: string;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectRepository(DesignProcessVideo) private readonly jobs: Repository<DesignProcessVideo>,
-    private readonly materials: MaterialsService,
-    private readonly braceletRenderer: BraceletRenderService,
     private readonly images: ImageAssetsService,
     config: ConfigService,
   ) {
     this.outputDir = resolve(this.images.uploadDir, 'design-process-videos');
     this.ffmpegPath = config.get<string>('FFMPEG_PATH', 'ffmpeg');
+    this.chromePath = config.get<string>('CHROME_PATH', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+    this.webRenderUrl = config.get<string>('VIDEO_WEB_RENDER_URL', 'http://127.0.0.1:5173/#/pages/video-render/video-render');
     if (!existsSync(this.outputDir)) mkdirSync(this.outputDir, { recursive: true });
   }
 
@@ -77,6 +76,21 @@ export class DesignProcessVideosService implements OnModuleInit {
     const row = await this.jobs.findOne({ where: { id } });
     if (!row) throw new NotFoundException('设计过程视频任务不存在');
     return row;
+  }
+
+  async saveWebFrame(id: string, index: number, imageBase64: string): Promise<{ ok: true }> {
+    const job = await this.findOne(id);
+    if (!Number.isInteger(index) || index < 0 || index >= job.steps.length) throw new BadRequestException('视频帧序号无效');
+    const match = imageBase64.match(/^data:image\/png;base64,(.+)$/);
+    if (!match) throw new BadRequestException('视频帧必须是 PNG Data URL');
+    const buffer = Buffer.from(match[1], 'base64');
+    if (!buffer.length || buffer.length > 12 * 1024 * 1024) throw new BadRequestException('视频帧大小异常');
+    const metadata = await sharp(buffer).metadata();
+    if (metadata.width !== 1024 || metadata.height !== 1024) throw new BadRequestException('视频帧必须是 1024×1024');
+    const frameDir = join(this.outputDir, id, 'web-frames');
+    if (!existsSync(frameDir)) mkdirSync(frameDir, { recursive: true });
+    writeFileSync(join(frameDir, `${String(index).padStart(5, '0')}.png`), buffer);
+    return { ok: true };
   }
 
   private schedule(id: string): void {
@@ -163,24 +177,6 @@ export class DesignProcessVideosService implements OnModuleInit {
     </svg>`);
   }
 
-  private materialForBead(bead: DesignProcessBeadDto, materialMap: Map<string, Material>): Material {
-    const existing = materialMap.get(bead.materialId);
-    if (existing && (!bead.image || existing.image === bead.image)) return existing;
-    return {
-      id: bead.materialId,
-      name: bead.name,
-      image: bead.image || existing?.image || '',
-      categoryId: existing?.categoryId || 'crystal-video',
-      specs: [{ specId: bead.specId, size: bead.size, price: bead.price }],
-      status: 'published', isAvailable: true,
-      crystalFamily: existing?.crystalFamily || '', aliases: existing?.aliases || [],
-      dominantColors: existing?.dominantColors || [], transparency: existing?.transparency || '',
-      pattern: existing?.pattern || '', inclusions: existing?.inclusions || '', sourceRefs: [], confidence: {},
-      generatedBy: existing?.generatedBy || 'manual', manualOverrides: [], embedding: null, assetBundle: {},
-      createdAt: existing?.createdAt || new Date(), updatedAt: existing?.updatedAt || new Date(),
-    };
-  }
-
   private async paletteOverlays(palette: DesignProcessPaletteItemDto[]) {
     const overlays: Array<{ input: Buffer; left: number; top: number }> = [];
     for (let index = 0; index < Math.min(6, palette.length); index += 1) {
@@ -202,6 +198,43 @@ export class DesignProcessVideosService implements OnModuleInit {
       }
     }
     return overlays;
+  }
+
+  /** 使用与 H5 DIY 相同的 Three.js 页面逐步回放，并等待页面上传 WebGL 导出帧。 */
+  private async renderWithWebClient(job: DesignProcessVideo): Promise<Buffer[]> {
+    if (!existsSync(this.chromePath)) throw new Error(`找不到 Chrome，请配置 CHROME_PATH: ${this.chromePath}`);
+    const frameDir = join(this.outputDir, job.id, 'web-frames');
+    if (!existsSync(frameDir)) mkdirSync(frameDir, { recursive: true });
+    const profileDir = join(this.outputDir, job.id, 'chrome-profile');
+    const url = `${this.webRenderUrl}${this.webRenderUrl.includes('?') ? '&' : '?'}jobId=${encodeURIComponent(job.id)}`;
+    const chrome = spawn(this.chromePath, [
+      '--headless=new', '--no-sandbox', '--no-first-run', '--disable-background-networking', '--disable-sync',
+      '--no-proxy-server', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader',
+      `--user-data-dir=${profileDir}`, '--window-size=1100,1100', url,
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let chromeError = '';
+    let exited = false;
+    chrome.stderr.on('data', (chunk) => { chromeError += String(chunk); });
+    chrome.once('exit', () => { exited = true; });
+    const deadline = Date.now() + 4 * 60 * 1000;
+    let ready = 0;
+    try {
+      while (ready < job.steps.length && Date.now() < deadline) {
+        ready = 0;
+        while (ready < job.steps.length && existsSync(join(frameDir, `${String(ready).padStart(5, '0')}.png`))) ready += 1;
+        job.progress = 3 + Math.round((ready / job.steps.length) * 40);
+        await this.jobs.save(job);
+        if (ready >= job.steps.length) break;
+        if (exited) throw new Error(`网页渲染器提前退出${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 350));
+      }
+      if (ready < job.steps.length) throw new Error(`网页渲染超时，仅生成 ${ready}/${job.steps.length} 帧`);
+      return Array.from({ length: job.steps.length }, (_, index) =>
+        readFileSync(join(frameDir, `${String(index).padStart(5, '0')}.png`)));
+    } finally {
+      if (!exited) chrome.kill('SIGTERM');
+      rmSync(profileDir, { recursive: true, force: true });
+    }
   }
 
   private async runFfmpeg(framePattern: string, output: string): Promise<void> {
@@ -226,9 +259,6 @@ export class DesignProcessVideosService implements OnModuleInit {
       mkdirSync(frameDir, { recursive: true });
       job.status = 'rendering'; job.progress = 2; job.error = null; await this.jobs.save(job);
 
-      const ids = [...new Set(job.steps.flatMap((step) => step.beads.map((bead) => bead.materialId)))];
-      const materialRows = await this.materials.findByIds(ids);
-      const materialMap = new Map(materialRows.map((material) => [material.id, material]));
       const steps = job.steps.length && job.steps[0].action === 'start'
         ? job.steps
         : [{ id: 'server-start', action: 'start' as const, at: Date.now(), beads: [] }, ...job.steps];
@@ -239,17 +269,7 @@ export class DesignProcessVideosService implements OnModuleInit {
           materialId: bead.materialId, name: bead.name, image: bead.image, size: bead.size, price: bead.price,
         }));
       const paletteOverlays = await this.paletteOverlays(palette);
-      const rendered: Buffer[] = [];
-
-      for (let index = 0; index < steps.length; index += 1) {
-        const validBeads = steps[index].beads.map((bead) => ({
-          material: this.materialForBead(bead, materialMap), specId: bead.specId,
-        }));
-        const publicPath = await this.braceletRenderer.render(`process-${id}`, index, validBeads);
-        rendered.push((await this.images.load(publicPath)).buffer);
-        job.progress = 3 + Math.round(((index + 1) / steps.length) * 40);
-        await this.jobs.save(job);
-      }
+      const rendered = await this.renderWithWebClient(job);
 
       let frameIndex = 0;
       const writeFrame = async (stepIndex: number, usePrevious: boolean) => {
@@ -280,6 +300,7 @@ export class DesignProcessVideosService implements OnModuleInit {
       const outputPath = join(jobDir, 'design-process.mp4');
       await this.runFfmpeg(join(frameDir, '%05d.png'), outputPath);
       rmSync(frameDir, { recursive: true, force: true });
+      rmSync(join(jobDir, 'web-frames'), { recursive: true, force: true });
       job.status = 'complete'; job.progress = 100;
       job.videoUrl = `/uploads/design-process-videos/${id}/design-process.mp4`;
       job.durationMs = Math.round((frameIndex / SOURCE_FPS) * 1000);

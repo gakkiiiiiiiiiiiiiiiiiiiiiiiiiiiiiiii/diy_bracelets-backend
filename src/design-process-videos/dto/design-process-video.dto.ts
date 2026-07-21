@@ -48,3 +48,7 @@ export class CreateDesignProcessVideoDto {
   palette?: DesignProcessPaletteItemDto[];
   @IsOptional() @IsNumber() @Min(8) @Max(40) wristCm = 16;
 }
+
+export class UploadDesignProcessFrameDto {
+  @IsString() imageBase64: string;
+}
