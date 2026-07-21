@@ -10,7 +10,7 @@ import { ImageAssetsService } from '../ai/image-assets.service';
 import { BraceletRenderService } from '../bracelet-agent/bracelet-render.service';
 import { Material } from '../materials/entities/material.entity';
 import { MaterialsService } from '../materials/materials.service';
-import { CreateDesignProcessVideoDto, DesignProcessBeadDto, DesignProcessStepDto } from './dto/design-process-video.dto';
+import { CreateDesignProcessVideoDto, DesignProcessBeadDto, DesignProcessPaletteItemDto, DesignProcessStepDto } from './dto/design-process-video.dto';
 import { DesignProcessVideo } from './entities/design-process-video.entity';
 
 const WIDTH = 720;
@@ -66,7 +66,7 @@ export class DesignProcessVideosService implements OnModuleInit {
     const meaningful = dto.steps.filter((step) => step.action !== 'start');
     if (!meaningful.length) throw new BadRequestException('至少完成一次珠子操作后才能生成视频');
     const row = await this.jobs.save(this.jobs.create({
-      status: 'queued', progress: 0, steps: dto.steps, wristCm: dto.wristCm || 16,
+      status: 'queued', progress: 0, steps: dto.steps, palette: dto.palette || null, wristCm: dto.wristCm || 16,
       videoUrl: null, durationMs: null, width: WIDTH, height: HEIGHT, error: null,
     }));
     this.schedule(row.id);
@@ -83,38 +83,20 @@ export class DesignProcessVideosService implements OnModuleInit {
     this.queue = this.queue.then(() => this.process(id)).catch((error) => this.logger.error(error));
   }
 
-  private colorOf(material?: Material): string {
-    return material?.dominantColors?.find((color) => /^#[0-9a-f]{6}$/i.test(color)) || '#a9bac4';
-  }
-
-  private cursorPosition(action: DesignProcessStepDto['action'], progress: number): { x: number; y: number } {
-    const lerp = (from: number, to: number) => from + (to - from) * progress;
-    if (action === 'add' || action === 'replace') return { x: lerp(540, 455), y: lerp(985, 455) };
-    if (action === 'remove') return { x: lerp(460, 430), y: lerp(430, 730) };
-    if (action === 'move') return { x: lerp(275, 455), y: lerp(420, 445) };
-    if (action === 'clear') return { x: 120, y: 720 };
-    if (action === 'apply') return { x: lerp(350, 360), y: lerp(1170, 430) };
-    return { x: 360, y: 680 };
-  }
-
-  private materialCards(finalStep: DesignProcessStepDto, materialMap: Map<string, Material>): string {
-    const unique = [...new Map(finalStep.beads.map((bead) => [bead.materialId, bead])).values()].slice(0, 6);
-    while (unique.length < 6) unique.push({
-      materialId: `placeholder-${unique.length}`, specId: '', name: ['白水晶', '紫水晶', '黄水晶'][unique.length % 3],
-      size: 8, price: 0, orderIndex: unique.length,
+  private materialCards(palette: DesignProcessPaletteItemDto[], finalStep: DesignProcessStepDto): string {
+    const cards: DesignProcessPaletteItemDto[] = palette.slice(0, 6);
+    while (cards.length < 6) cards.push({
+      materialId: `placeholder-${cards.length}`, name: '水晶素材', image: '', size: 8, price: 0,
     });
-    return unique.map((bead, index) => {
+    return cards.map((bead, index) => {
       const column = index % 3;
       const row = Math.floor(index / 3);
       const x = 136 + column * 186;
       const y = 897 + row * 174;
-      const color = this.colorOf(materialMap.get(bead.materialId));
       const count = finalStep.beads.filter((entry) => entry.materialId === bead.materialId).length;
       return `<g>
         <rect x="${x}" y="${y}" width="168" height="158" rx="18" fill="#ffffff" stroke="#e7e4df"/>
-        <defs><radialGradient id="bead-${index}" cx="32%" cy="24%" r="72%"><stop stop-color="#fff" stop-opacity=".9"/><stop offset=".24" stop-color="${color}" stop-opacity=".72"/><stop offset=".78" stop-color="${color}"/><stop offset="1" stop-color="#3f4850" stop-opacity=".62"/></radialGradient></defs>
-        <circle cx="${x + 84}" cy="${y + 53}" r="38" fill="url(#bead-${index})" stroke="#fff" stroke-opacity=".7"/>
-        <path d="M${x + 56} ${y + 45} Q${x + 68} ${y + 23} ${x + 91} ${y + 20}" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity=".58"/>
+        <circle cx="${x + 84}" cy="${y + 53}" r="38" fill="#f1efeb"/>
         <text x="${x + 84}" y="${y + 111}" text-anchor="middle" class="card-name">${escapeXml(clampText(bead.name, 8))}</text>
         <text x="${x + 84}" y="${y + 137}" text-anchor="middle" class="card-meta">${bead.size}mm · ¥${bead.price.toFixed(0)}${count ? ` · ${count}颗` : ''}</text>
       </g>`;
@@ -127,13 +109,13 @@ export class DesignProcessVideosService implements OnModuleInit {
     stepCount: number,
     wristCm: number,
     finalStep: DesignProcessStepDto,
-    materialMap: Map<string, Material>,
+    palette: DesignProcessPaletteItemDto[],
   ): Buffer {
     const circumference = step.beads.reduce((sum, bead) => sum + bead.size / 10, 0);
     const totalPrice = step.beads.reduce((sum, bead) => sum + bead.price, 0);
     const status = circumference + 0.05 < wristCm ? '珠子数量不足' : '尺寸已合适';
     const used = [...new Set(step.beads.map((bead) => bead.materialId))].length;
-    const cards = this.materialCards(finalStep, materialMap);
+    const cards = this.materialCards(palette, finalStep);
     return Buffer.from(`<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="page" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfaf7"/><stop offset="1" stop-color="#f0ede7"/></linearGradient>
@@ -181,13 +163,45 @@ export class DesignProcessVideosService implements OnModuleInit {
     </svg>`);
   }
 
-  private cursorSvg(x: number, y: number, pressed: boolean): Buffer {
-    return Buffer.from(`<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-      ${pressed ? `<circle cx="${x}" cy="${y}" r="30" fill="none" stroke="#d96861" stroke-width="4" opacity=".45"/>` : ''}
-      <g transform="translate(${x} ${y})" filter="drop-shadow(0 3px 4px rgba(0,0,0,.25))">
-        <path d="M0 0L3 38L13 27L24 45L33 40L22 23L38 20Z" fill="#fff" stroke="#283138" stroke-width="3" stroke-linejoin="round"/>
-      </g>
-    </svg>`);
+  private materialForBead(bead: DesignProcessBeadDto, materialMap: Map<string, Material>): Material {
+    const existing = materialMap.get(bead.materialId);
+    if (existing && (!bead.image || existing.image === bead.image)) return existing;
+    return {
+      id: bead.materialId,
+      name: bead.name,
+      image: bead.image || existing?.image || '',
+      categoryId: existing?.categoryId || 'crystal-video',
+      specs: [{ specId: bead.specId, size: bead.size, price: bead.price }],
+      status: 'published', isAvailable: true,
+      crystalFamily: existing?.crystalFamily || '', aliases: existing?.aliases || [],
+      dominantColors: existing?.dominantColors || [], transparency: existing?.transparency || '',
+      pattern: existing?.pattern || '', inclusions: existing?.inclusions || '', sourceRefs: [], confidence: {},
+      generatedBy: existing?.generatedBy || 'manual', manualOverrides: [], embedding: null, assetBundle: {},
+      createdAt: existing?.createdAt || new Date(), updatedAt: existing?.updatedAt || new Date(),
+    };
+  }
+
+  private async paletteOverlays(palette: DesignProcessPaletteItemDto[]) {
+    const overlays: Array<{ input: Buffer; left: number; top: number }> = [];
+    for (let index = 0; index < Math.min(6, palette.length); index += 1) {
+      if (!palette[index].image) continue;
+      try {
+        const loaded = await this.images.load(palette[index].image);
+        const input = await sharp(loaded.buffer)
+          .ensureAlpha()
+          .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 2 })
+          .resize(76, 76, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .composite([{
+            input: Buffer.from('<svg width="76" height="76" xmlns="http://www.w3.org/2000/svg"><circle cx="38" cy="38" r="37" fill="#fff"/></svg>'),
+            blend: 'dest-in',
+          }])
+          .png().toBuffer();
+        overlays.push({ input, left: 182 + (index % 3) * 186, top: 912 + Math.floor(index / 3) * 174 });
+      } catch (error) {
+        this.logger.warn(`无法载入视频素材卡图片 ${palette[index].image}: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return overlays;
   }
 
   private async runFfmpeg(framePattern: string, output: string): Promise<void> {
@@ -219,15 +233,18 @@ export class DesignProcessVideosService implements OnModuleInit {
         ? job.steps
         : [{ id: 'server-start', action: 'start' as const, at: Date.now(), beads: [] }, ...job.steps];
       const finalStep = [...steps].reverse().find((step) => step.beads.length) || steps[steps.length - 1];
+      const palette = job.palette?.length
+        ? job.palette
+        : [...new Map(finalStep.beads.map((bead) => [bead.materialId, bead])).values()].map((bead) => ({
+          materialId: bead.materialId, name: bead.name, image: bead.image, size: bead.size, price: bead.price,
+        }));
+      const paletteOverlays = await this.paletteOverlays(palette);
       const rendered: Buffer[] = [];
 
       for (let index = 0; index < steps.length; index += 1) {
-        const validBeads = steps[index].beads.map((bead) => {
-          const material = materialMap.get(bead.materialId);
-          if (!material) return null;
-          const specId = material.specs.some((spec) => spec.specId === bead.specId) ? bead.specId : material.specs[0]?.specId;
-          return specId ? { material, specId } : null;
-        }).filter(Boolean) as Array<{ material: Material; specId: string }>;
+        const validBeads = steps[index].beads.map((bead) => ({
+          material: this.materialForBead(bead, materialMap), specId: bead.specId,
+        }));
         const publicPath = await this.braceletRenderer.render(`process-${id}`, index, validBeads);
         rendered.push((await this.images.load(publicPath)).buffer);
         job.progress = 3 + Math.round(((index + 1) / steps.length) * 40);
@@ -235,30 +252,29 @@ export class DesignProcessVideosService implements OnModuleInit {
       }
 
       let frameIndex = 0;
-      const writeFrame = async (stepIndex: number, animationProgress: number, usePrevious: boolean) => {
+      const writeFrame = async (stepIndex: number, usePrevious: boolean) => {
         const step = steps[stepIndex];
-        const workspace = this.workspaceSvg(step, stepIndex, steps.length, job.wristCm, finalStep, materialMap);
+        const workspace = this.workspaceSvg(step, stepIndex, steps.length, job.wristCm, finalStep, palette);
         const bracelet = rendered[usePrevious && stepIndex > 0 ? stepIndex - 1 : stepIndex];
-        const cursor = this.cursorPosition(step.action, animationProgress);
         const output = await sharp(workspace)
           .composite([
-            { input: await sharp(bracelet).resize(510, 510, { fit: 'contain' }).png().toBuffer(), left: 105, top: 150 },
-            { input: this.cursorSvg(cursor.x, cursor.y, animationProgress > 0.45 && animationProgress < 0.8), left: 0, top: 0 },
+            { input: await sharp(bracelet).resize(720, 720, { fit: 'contain' }).png().toBuffer(), left: 0, top: 105 },
+            ...paletteOverlays,
           ])
           .png({ compressionLevel: 4 }).toBuffer();
         writeFileSync(join(frameDir, `${String(frameIndex).padStart(5, '0')}.png`), output);
         frameIndex += 1;
       };
 
-      for (let index = 0; index < INTRO_FRAMES; index += 1) await writeFrame(0, 0, false);
+      for (let index = 0; index < INTRO_FRAMES; index += 1) await writeFrame(0, false);
       for (let stepIndex = 1; stepIndex < steps.length; stepIndex += 1) {
         for (let part = 0; part < FRAMES_PER_STEP; part += 1) {
-          await writeFrame(stepIndex, part / (FRAMES_PER_STEP - 1), part < Math.floor(FRAMES_PER_STEP / 2));
+          await writeFrame(stepIndex, part < Math.floor(FRAMES_PER_STEP / 2));
         }
         job.progress = 45 + Math.round((stepIndex / Math.max(1, steps.length - 1)) * 40);
         await this.jobs.save(job);
       }
-      for (let index = 0; index < OUTRO_FRAMES; index += 1) await writeFrame(steps.length - 1, 1, false);
+      for (let index = 0; index < OUTRO_FRAMES; index += 1) await writeFrame(steps.length - 1, false);
 
       job.status = 'encoding'; job.progress = 88; await this.jobs.save(job);
       const outputPath = join(jobDir, 'design-process.mp4');

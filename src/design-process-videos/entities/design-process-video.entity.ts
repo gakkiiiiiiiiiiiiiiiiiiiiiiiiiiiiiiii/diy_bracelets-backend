@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { DesignProcessStepDto } from '../dto/design-process-video.dto';
+import { DesignProcessPaletteItemDto, DesignProcessStepDto } from '../dto/design-process-video.dto';
 
 export type DesignProcessVideoStatus = 'queued' | 'rendering' | 'encoding' | 'complete' | 'failed';
 
@@ -9,6 +9,7 @@ export class DesignProcessVideo {
   @Column({ type: 'varchar', length: 20, default: 'queued' }) status: DesignProcessVideoStatus;
   @Column({ type: 'int', default: 0 }) progress: number;
   @Column('simple-json') steps: DesignProcessStepDto[];
+  @Column('simple-json', { nullable: true }) palette: DesignProcessPaletteItemDto[] | null;
   @Column({ type: 'float', default: 16 }) wristCm: number;
   @Column({ type: 'text', nullable: true }) videoUrl: string | null;
   @Column({ type: 'int', nullable: true }) durationMs: number | null;

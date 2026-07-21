@@ -109,7 +109,7 @@ export class BraceletRenderService {
 
   private async normalizeBeadAsset(input: Buffer, material: Material, px: number): Promise<Buffer> {
     try {
-      return await sharp(input)
+      const normalized = await sharp(input)
         .ensureAlpha()
         .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 3 })
         .resize(px, px, {
@@ -117,6 +117,11 @@ export class BraceletRenderService {
           kernel: sharp.kernel.lanczos3,
           background: { r: 0, g: 0, b: 0, alpha: 0 },
         })
+        .png({ compressionLevel: 9, adaptiveFiltering: true })
+        .toBuffer();
+      const mask = Buffer.from(`<svg width="${px}" height="${px}" xmlns="http://www.w3.org/2000/svg"><circle cx="${px / 2}" cy="${px / 2}" r="${px * 0.49}" fill="#fff"/></svg>`);
+      return sharp(normalized)
+        .composite([{ input: mask, blend: 'dest-in' }])
         .png({ compressionLevel: 9, adaptiveFiltering: true })
         .toBuffer();
     } catch {
