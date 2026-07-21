@@ -29,13 +29,15 @@
 		"rxjs": "^7.8.1",
 		"sharp": "^0.35.3",
 		"sqlite3": "^5.1.7",
-		"typeorm": "^0.3.19"
+		"typeorm": "^0.3.19",
+		"ws": "^8.21.1"
 	},
 	"devDependencies": {
 		"@nestjs/cli": "^10.3.0",
 		"@types/express": "^4.17.21",
 		"@types/multer": "^1.4.11",
 		"@types/node": "^20.11.0",
+		"@types/ws": "^8.18.1",
 		"typescript": "^5.3.3"
 	}
 }

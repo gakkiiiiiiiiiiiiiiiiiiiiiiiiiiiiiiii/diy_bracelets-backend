@@ -11,9 +11,7 @@ if (!existsSync(uploadDir)) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
-  app.use(express.json({ limit: '15mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+  const app = await NestFactory.create(AppModule);
   app.use('/uploads', express.static(uploadDir));
   app.useGlobalPipes(
     new ValidationPipe({

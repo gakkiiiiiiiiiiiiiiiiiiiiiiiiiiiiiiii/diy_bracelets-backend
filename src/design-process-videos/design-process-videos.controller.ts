@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { CreateDesignProcessVideoDto, UploadDesignProcessFrameDto } from './dto/design-process-video.dto';
+import { CreateDesignProcessVideoDto } from './dto/design-process-video.dto';
 import { DesignProcessVideosService } from './design-process-videos.service';
 
 @Controller('api/design-process-videos')
@@ -14,14 +14,5 @@ export class DesignProcessVideosController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
-  }
-
-  @Post(':id/render-frames/:index')
-  uploadFrame(
-    @Param('id') id: string,
-    @Param('index') index: string,
-    @Body() dto: UploadDesignProcessFrameDto,
-  ) {
-    return this.service.saveWebFrame(id, Number(index), dto.imageBase64);
   }
 }
