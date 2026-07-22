@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 
 export class DesignProcessBeadDto {
+  @IsOptional() @IsString() id?: string;
   @IsString() materialId: string;
   @IsString() specId: string;
   @IsString() name: string;

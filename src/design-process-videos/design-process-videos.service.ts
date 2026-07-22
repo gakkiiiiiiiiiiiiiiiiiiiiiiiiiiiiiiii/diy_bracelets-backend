@@ -12,10 +12,10 @@ import { DesignProcessVideo } from './entities/design-process-video.entity';
 
 const WIDTH = 720;
 const HEIGHT = 1280;
-const SOURCE_FPS = 6;
-const FRAMES_PER_STEP = 4;
-const INTRO_FRAMES = 6;
-const OUTRO_FRAMES = 8;
+const CAPTURE_FPS = 24;
+const OUTPUT_FPS = 30;
+const INTRO_FRAMES = 12;
+const OUTRO_FRAMES = 18;
 
 @Injectable()
 export class DesignProcessVideosService implements OnModuleInit {
@@ -111,6 +111,10 @@ export class DesignProcessVideosService implements OnModuleInit {
       });
       let commandId = 0;
       const pending = new Map<number, { resolve: (value: any) => void; reject: (reason: Error) => void }>();
+      socket.onclose = () => {
+        pending.forEach((task) => task.reject(new Error('Chrome DevTools 连接已关闭')));
+        pending.clear();
+      };
       socket.onmessage = (event: { data: string }) => {
         const message = JSON.parse(String(event.data));
         if (!message.id || !pending.has(message.id)) return;
@@ -132,10 +136,21 @@ export class DesignProcessVideosService implements OnModuleInit {
       });
 
       const frames: Buffer[] = [];
-      while (frames.length < job.steps.length && Date.now() < deadline) {
+      let totalFrames = 0;
+      while (!totalFrames && Date.now() < deadline && !exited) {
+        const state = await call('Runtime.evaluate', {
+          expression: 'Number(document.documentElement.dataset.videoFrameTotal || 0)',
+          returnByValue: true,
+        });
+        totalFrames = Number(state?.result?.value || 0);
+        if (!totalFrames) await wait(20);
+      }
+      if (exited) throw new Error(`网页渲染器提前退出${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
+      if (!totalFrames) throw new Error('网页渲染器未提供视频帧总数');
+      while (frames.length < totalFrames && Date.now() < deadline) {
         if (exited) throw new Error(`网页渲染器提前退出${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
         const state = await call('Runtime.evaluate', {
-          expression: 'document.documentElement.dataset.videoFrameIndex || ""',
+          expression: 'document.documentElement.dataset.videoFrameSerial || ""',
           returnByValue: true,
         });
         const readyIndex = Number(state?.result?.value);
@@ -147,13 +162,13 @@ export class DesignProcessVideosService implements OnModuleInit {
           await call('Runtime.evaluate', {
             expression: `document.documentElement.dataset.videoFrameAck = ${JSON.stringify(String(readyIndex))}`,
           });
-          job.progress = 3 + Math.round((frames.length / job.steps.length) * 40);
+          job.progress = 3 + Math.round((frames.length / totalFrames) * 72);
           await this.jobs.save(job);
         } else {
-          await wait(80);
+          await wait(8);
         }
       }
-      if (frames.length < job.steps.length) throw new Error(`网页渲染超时，仅截取 ${frames.length}/${job.steps.length} 帧`);
+      if (frames.length < totalFrames) throw new Error(`网页渲染超时，仅截取 ${frames.length}/${totalFrames} 帧`);
       return frames;
     } finally {
       if (socket?.readyState === 1) socket.close();
@@ -165,8 +180,8 @@ export class DesignProcessVideosService implements OnModuleInit {
   private async runFfmpeg(framePattern: string, output: string): Promise<void> {
     await new Promise<void>((resolvePromise, reject) => {
       const child = spawn(this.ffmpegPath, [
-        '-y', '-hide_banner', '-loglevel', 'error', '-framerate', String(SOURCE_FPS), '-i', framePattern,
-        '-vf', 'fps=24,format=yuv420p', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-movflags', '+faststart', output,
+        '-y', '-hide_banner', '-loglevel', 'error', '-framerate', String(CAPTURE_FPS), '-i', framePattern,
+        '-vf', `fps=${OUTPUT_FPS},format=yuv420p`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-movflags', '+faststart', output,
       ], { stdio: ['ignore', 'ignore', 'pipe'] });
       let errorText = '';
       child.stderr.on('data', (chunk) => { errorText += String(chunk); });
@@ -184,25 +199,17 @@ export class DesignProcessVideosService implements OnModuleInit {
       mkdirSync(frameDir, { recursive: true });
       job.status = 'rendering'; job.progress = 2; job.error = null; await this.jobs.save(job);
 
-      const steps = job.steps;
       const rendered = await this.renderWithWebClient(job);
 
       let frameIndex = 0;
-      const writeFrame = (stepIndex: number, usePrevious: boolean) => {
-        const sourceIndex = usePrevious && stepIndex > 0 ? stepIndex - 1 : stepIndex;
+      const writeFrame = (sourceIndex: number) => {
         writeFileSync(join(frameDir, `${String(frameIndex).padStart(5, '0')}.png`), rendered[sourceIndex]);
         frameIndex += 1;
       };
 
-      for (let index = 0; index < INTRO_FRAMES; index += 1) writeFrame(0, false);
-      for (let stepIndex = 1; stepIndex < steps.length; stepIndex += 1) {
-        for (let part = 0; part < FRAMES_PER_STEP; part += 1) {
-          writeFrame(stepIndex, part < Math.floor(FRAMES_PER_STEP / 2));
-        }
-        job.progress = 45 + Math.round((stepIndex / Math.max(1, steps.length - 1)) * 40);
-        await this.jobs.save(job);
-      }
-      for (let index = 0; index < OUTRO_FRAMES; index += 1) writeFrame(steps.length - 1, false);
+      for (let index = 0; index < INTRO_FRAMES; index += 1) writeFrame(0);
+      rendered.forEach((_, index) => writeFrame(index));
+      for (let index = 0; index < OUTRO_FRAMES; index += 1) writeFrame(rendered.length - 1);
 
       job.status = 'encoding'; job.progress = 88; await this.jobs.save(job);
       const outputPath = join(jobDir, 'design-process.mp4');
@@ -210,7 +217,7 @@ export class DesignProcessVideosService implements OnModuleInit {
       rmSync(frameDir, { recursive: true, force: true });
       job.status = 'complete'; job.progress = 100;
       job.videoUrl = `/uploads/design-process-videos/${id}/design-process.mp4`;
-      job.durationMs = Math.round((frameIndex / SOURCE_FPS) * 1000);
+      job.durationMs = Math.round((frameIndex / CAPTURE_FPS) * 1000);
       await this.jobs.save(job);
     } catch (error) {
       job.status = 'failed'; job.error = error instanceof Error ? error.message : String(error);
