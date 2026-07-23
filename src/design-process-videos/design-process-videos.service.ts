@@ -16,6 +16,10 @@ const CAPTURE_FPS = 24;
 const OUTPUT_FPS = 30;
 const INTRO_FRAMES = 12;
 const OUTRO_FRAMES = 18;
+const WEB_RENDER_STARTUP_TIMEOUT_MS = 60_000;
+const WEB_RENDER_MIN_CAPTURE_TIMEOUT_MS = 5 * 60_000;
+const WEB_RENDER_CAPTURE_TIMEOUT_PER_FRAME_MS = 1_000;
+const WEB_RENDER_CAPTURE_GRACE_MS = 90_000;
 
 @Injectable()
 export class DesignProcessVideosService implements OnModuleInit {
@@ -85,15 +89,15 @@ export class DesignProcessVideosService implements OnModuleInit {
     let exited = false;
     chrome.stderr.on('data', (chunk) => { chromeError += String(chunk); });
     chrome.once('exit', () => { exited = true; });
-    const deadline = Date.now() + 4 * 60 * 1000;
+    const startupDeadline = Date.now() + WEB_RENDER_STARTUP_TIMEOUT_MS;
     const wait = (ms: number) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
     let socket: any = null;
     try {
-      while (!existsSync(devToolsPortFile) && Date.now() < deadline && !exited) await wait(80);
+      while (!existsSync(devToolsPortFile) && Date.now() < startupDeadline && !exited) await wait(80);
       if (!existsSync(devToolsPortFile)) throw new Error(`Chrome 调试端口启动失败${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
       const port = Number(readFileSync(devToolsPortFile, 'utf8').split(/\r?\n/)[0]);
       let target: { webSocketDebuggerUrl?: string; url?: string } | undefined;
-      while (!target?.webSocketDebuggerUrl && Date.now() < deadline && !exited) {
+      while (!target?.webSocketDebuggerUrl && Date.now() < startupDeadline && !exited) {
         try {
           const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json()) as Array<{ webSocketDebuggerUrl?: string; url?: string }>;
           target = targets.find((item) => item.url?.includes('/pages/design/design'));
@@ -137,7 +141,7 @@ export class DesignProcessVideosService implements OnModuleInit {
 
       const frames: Buffer[] = [];
       let totalFrames = 0;
-      while (!totalFrames && Date.now() < deadline && !exited) {
+      while (!totalFrames && Date.now() < startupDeadline && !exited) {
         const state = await call('Runtime.evaluate', {
           expression: 'Number(document.documentElement.dataset.videoFrameTotal || 0)',
           returnByValue: true,
@@ -147,7 +151,13 @@ export class DesignProcessVideosService implements OnModuleInit {
       }
       if (exited) throw new Error(`网页渲染器提前退出${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
       if (!totalFrames) throw new Error('网页渲染器未提供视频帧总数');
-      while (frames.length < totalFrames && Date.now() < deadline) {
+      const captureTimeout = Math.max(
+        WEB_RENDER_MIN_CAPTURE_TIMEOUT_MS,
+        totalFrames * WEB_RENDER_CAPTURE_TIMEOUT_PER_FRAME_MS + WEB_RENDER_CAPTURE_GRACE_MS,
+      );
+      const captureDeadline = Date.now() + captureTimeout;
+      let savedProgress = job.progress;
+      while (frames.length < totalFrames && Date.now() < captureDeadline) {
         if (exited) throw new Error(`网页渲染器提前退出${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
         const state = await call('Runtime.evaluate', {
           expression: 'document.documentElement.dataset.videoFrameSerial || ""',
@@ -162,8 +172,12 @@ export class DesignProcessVideosService implements OnModuleInit {
           await call('Runtime.evaluate', {
             expression: `document.documentElement.dataset.videoFrameAck = ${JSON.stringify(String(readyIndex))}`,
           });
-          job.progress = 3 + Math.round((frames.length / totalFrames) * 72);
-          await this.jobs.save(job);
+          const nextProgress = 3 + Math.round((frames.length / totalFrames) * 72);
+          if (nextProgress !== savedProgress) {
+            job.progress = nextProgress;
+            await this.jobs.save(job);
+            savedProgress = nextProgress;
+          }
         } else {
           await wait(8);
         }
