@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
@@ -8,6 +8,7 @@ import { CreateExtractionJobDto } from './dto/create-extraction-job.dto';
 import { ExtractionService } from './extraction.service';
 import { Access } from '../auth/access.decorator';
 import { ImageAssetsService } from '../ai/image-assets.service';
+import { ExtractionEnabledGuard } from './extraction-enabled.guard';
 
 const extractionStorage = diskStorage({
   destination: (_req, _file, callback) => {
@@ -31,9 +32,10 @@ export class ExtractionController {
   ) {}
 
   @Post('extraction-images')
-  @UseInterceptors(FilesInterceptor('files', 30, {
+  @UseGuards(ExtractionEnabledGuard)
+  @UseInterceptors(FilesInterceptor('files', 10, {
     storage: extractionStorage,
-    limits: { fileSize: 20 * 1024 * 1024, files: 30 },
+    limits: { fileSize: 10 * 1024 * 1024, files: 10 },
     fileFilter: (_req, file, callback) => {
       const allowed = ['image/png', 'image/jpeg', 'image/webp'].includes(file.mimetype) && /\.(png|jpe?g|webp)$/i.test(file.originalname);
       callback(allowed ? null : new BadRequestException('只支持 PNG、JPG 和 WebP 图片'), allowed);

@@ -224,7 +224,8 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },
       body: fakeExtractionForm,
     });
-    assert.equal(rejectedFakeExtraction.status, 400);
+    assert.equal(rejectedFakeExtraction.status, 503);
+    assert.equal(readdirSync(join(runtimeDir, 'uploads')).includes('extraction-sources'), false);
 
     const validImageForm = new FormData();
     validImageForm.append('file', new Blob([Buffer.from(
