@@ -10,7 +10,7 @@
 4. 将 `UPLOAD_DIR` 挂载到已备份的持久卷，并设置 `UPLOAD_STORAGE_MODE=persistent`；该变量是部署责任确认，不会自动把临时目录变成持久存储。
 5. 发布前执行一次手工备份，并记录备份文件、SHA-256、数据库版本和恢复演练日期。
 6. 首次运行 migration 时只启动一个 API 实例；确认 migration 和 `/health/ready` 成功后再扩容，避免多个新实例竞争迁移。
-7. 过程视频保持 `DESIGN_PROCESS_VIDEO_ENABLED=false`，直到 Chromium、FFmpeg、持久存储和容器可访问的 `VIDEO_WEB_RENDER_URL` 均通过手工小批量验证；渲染页 Origin 必须加入 `CORS_ORIGINS`，前端入口也需单独显式开启。
+7. 过程视频保持 `DESIGN_PROCESS_VIDEO_ENABLED=false`，直到 Chromium、FFmpeg、持久存储和容器可访问的 `VIDEO_WEB_RENDER_URL` 均通过手工小批量验证；渲染页 Origin 必须加入 `CORS_ORIGINS`，前端入口也需单独显式开启。启用时必须设置 `AI_TASKS_SINGLE_INSTANCE=true` 并保持恰好一个任务执行实例；重启会把中断任务标记为失败，不会自动渲染。
 8. 搭配 Agent 与自动素材提取保持 `BRACELET_AGENT_ENABLED=false`、`AI_EXTRACTION_ENABLED=false`。若专项验收后启用，先确认单次批量、模型请求次数和预算告警，再设置 `AI_TASKS_SINGLE_INSTANCE=true` 并维持恰好一个任务执行实例；启动或重启不会自动重试中断任务。
 
 ## 发布与回滚

@@ -119,3 +119,96 @@ test('internal render reads require a valid token and never return its hash', as
     rmSync(runtimeDir, { recursive: true, force: true });
   }
 });
+
+test('interrupted video jobs fail on restart without being scheduled again', async () => {
+  const runtimeDir = mkdtempSync(join(tmpdir(), 'diy-bracelets-video-restart-'));
+  const interrupted = [
+    { id: 'queued', status: 'queued', progress: 0, error: null, renderTokenHash: null },
+    { id: 'rendering', status: 'rendering', progress: 38, error: null, renderTokenHash: 'secret-hash' },
+    { id: 'encoding', status: 'encoding', progress: 88, error: null, renderTokenHash: null },
+  ];
+  const saved = [];
+  const jobs = {
+    async find() { return interrupted; },
+    async save(row) { saved.push({ ...row }); return row; },
+  };
+
+  try {
+    const service = new DesignProcessVideosService(
+      jobs,
+      { uploadDir: runtimeDir },
+      { findByIds: async () => [] },
+      config(true),
+    );
+    let scheduled = 0;
+    service.schedule = () => { scheduled += 1; };
+    await service.onModuleInit();
+
+    assert.equal(scheduled, 0);
+    assert.equal(saved.length, 3);
+    assert.ok(saved.every((row) => row.status === 'failed'));
+    assert.ok(saved.every((row) => row.error.includes('未自动重试')));
+    assert.ok(saved.every((row) => row.renderTokenHash === null));
+    assert.equal(saved.find((row) => row.id === 'rendering').progress, 38);
+  } finally {
+    rmSync(runtimeDir, { recursive: true, force: true });
+  }
+});
+
+test('concurrent video submissions are admitted serially for one task executor', async () => {
+  const runtimeDir = mkdtempSync(join(tmpdir(), 'diy-bracelets-video-admission-'));
+  const rows = [];
+  const jobs = {
+    async count(options) {
+      const ownerId = options.where.ownerId;
+      return rows.filter((row) => (
+        ['queued', 'rendering', 'encoding'].includes(row.status)
+        && (!ownerId || row.ownerId === ownerId)
+      )).length;
+    },
+    create: (row) => row,
+    async save(row) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const saved = { id: `job-${rows.length + 1}`, ...row };
+      rows.push(saved);
+      return saved;
+    },
+  };
+  const materials = {
+    findByIds: async () => [{
+      id: 'source-clear-quartz',
+      name: '净体白水晶',
+      image: '/static/materials/reference-crystals/clear-quartz/clear-quartz-preview.png',
+      status: 'published',
+      isAvailable: true,
+      specs: [{ specId: 'source-clear-quartz-6mm-0', size: 6, price: 3 }],
+    }],
+  };
+  const dto = {
+    steps: [{
+      id: 'step-1', action: 'add', at: 1,
+      beads: [{ id: 'bead-1', materialId: 'source-clear-quartz', specId: 'source-clear-quartz-6mm-0', size: 6 }],
+    }],
+  };
+
+  try {
+    const service = new DesignProcessVideosService(
+      jobs,
+      { uploadDir: runtimeDir },
+      materials,
+      config(true),
+    );
+    service.schedule = () => {};
+    const results = await Promise.allSettled([
+      service.create('same-user', dto),
+      service.create('same-user', dto),
+    ]);
+
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter((result) => result.status === 'rejected').length, 1);
+    assert.match(results.find((result) => result.status === 'rejected').reason.message, /正在生成/);
+    assert.equal(rows.length, 1);
+  } finally {
+    rmSync(runtimeDir, { recursive: true, force: true });
+  }
+});

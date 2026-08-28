@@ -44,6 +44,7 @@ export class DesignProcessVideosService implements OnModuleInit {
   private readonly webRenderUrl: string;
   private readonly enabled: boolean;
   private queue: Promise<void> = Promise.resolve();
+  private admissionQueue: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectRepository(DesignProcessVideo) private readonly jobs: Repository<DesignProcessVideo>,
@@ -63,14 +64,20 @@ export class DesignProcessVideosService implements OnModuleInit {
     if (!this.enabled) return;
     const interrupted = await this.jobs.find({ where: [{ status: 'queued' }, { status: 'rendering' }, { status: 'encoding' }] });
     for (const job of interrupted) {
-      job.status = 'queued';
-      job.progress = 0;
+      job.status = 'failed';
+      job.error = '服务重启中断任务；为避免重复渲染，系统未自动重试，请重新生成';
+      job.renderTokenHash = null;
       await this.jobs.save(job);
-      this.schedule(job.id);
     }
   }
 
-  async create(userId: string, dto: CreateDesignProcessVideoDto): Promise<DesignProcessVideo> {
+  create(userId: string, dto: CreateDesignProcessVideoDto): Promise<DesignProcessVideo> {
+    const task = this.admissionQueue.then(() => this.createOne(userId, dto));
+    this.admissionQueue = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  private async createOne(userId: string, dto: CreateDesignProcessVideoDto): Promise<DesignProcessVideo> {
     if (!this.enabled) throw new ServiceUnavailableException('过程视频功能尚未启用');
     const meaningful = dto.steps.filter((step) => step.action !== 'start');
     if (!meaningful.length) throw new BadRequestException('至少完成一次珠子操作后才能生成视频');

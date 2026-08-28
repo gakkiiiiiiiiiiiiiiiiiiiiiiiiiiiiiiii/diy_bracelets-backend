@@ -165,8 +165,8 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
   if (uploadStorageMode !== 'persistent') {
     throw new Error('Production requires UPLOAD_STORAGE_MODE=persistent and a durable UPLOAD_DIR mount');
   }
-  if ((braceletAgentEnabled || aiExtractionEnabled) && !aiTasksSingleInstance) {
-    throw new Error('Production AI tasks require AI_TASKS_SINGLE_INSTANCE=true and exactly one backend task executor');
+  if ((designProcessVideoEnabled || braceletAgentEnabled || aiExtractionEnabled) && !aiTasksSingleInstance) {
+    throw new Error('Production background tasks require AI_TASKS_SINGLE_INSTANCE=true and exactly one backend task executor');
   }
   if (aiExtractionEnabled && !text(env.OPENAI_API_KEY)) {
     throw new Error('AI_EXTRACTION_ENABLED=true requires OPENAI_API_KEY');

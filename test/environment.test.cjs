@@ -166,9 +166,17 @@ test('production video rendering is opt-in and requires an absolute render URL',
   };
 
   assert.throws(() => validateEnvironment(base), /VIDEO_WEB_RENDER_URL/);
+  assert.throws(
+    () => validateEnvironment({
+      ...base,
+      VIDEO_WEB_RENDER_URL: 'https://app.example.com/#/pages/design/design',
+    }),
+    /AI_TASKS_SINGLE_INSTANCE=true/,
+  );
   const result = validateEnvironment({
     ...base,
     VIDEO_WEB_RENDER_URL: 'https://app.example.com/#/pages/design/design',
+    AI_TASKS_SINGLE_INSTANCE: 'true',
   });
   assert.equal(result.DESIGN_PROCESS_VIDEO_ENABLED, true);
 });

@@ -55,7 +55,7 @@
 | `VIDEO_WEB_RENDER_URL` | 启用过程视频时必填的 H5 设计页绝对 URL | `https://app.example.com/#/pages/design/design` |
 | `BRACELET_AGENT_ENABLED` | 管理端搭配 Agent，专项验收前保持关闭 | `false` |
 | `AI_EXTRACTION_ENABLED` | 会产生模型调用费用的素材提取，专项验收前保持关闭 | `false` |
-| `AI_TASKS_SINGLE_INSTANCE` | 任一后台 AI 任务启用时必须确认只有一个执行实例 | `false` |
+| `AI_TASKS_SINGLE_INSTANCE` | 过程视频或任一后台 AI 任务启用时必须确认只有一个执行实例 | `false` |
 | `DB_SSL_MODE` | 跨主机 PostgreSQL 建议使用 | `verify-full` |
 | `DB_SSL_CA_PATH` | 云数据库 CA 的只读挂载路径 | 由数据库平台提供 |
 | `DB_SSL_CA` | 无法挂载 CA 文件时使用的 PEM 文本 | 可用 `\n` 表示换行 |
