@@ -71,6 +71,17 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
     3_000,
     'DB_CONNECT_RETRY_DELAY_MS',
   );
+  env.DB_CONNECTION_TIMEOUT_MS = positiveInteger(
+    env.DB_CONNECTION_TIMEOUT_MS,
+    5_000,
+    'DB_CONNECTION_TIMEOUT_MS',
+  );
+  env.DB_STATEMENT_TIMEOUT_MS = positiveInteger(
+    env.DB_STATEMENT_TIMEOUT_MS,
+    15_000,
+    'DB_STATEMENT_TIMEOUT_MS',
+  );
+  env.DB_POOL_MAX = positiveInteger(env.DB_POOL_MAX, 10, 'DB_POOL_MAX');
   env.ADMIN_SESSION_TTL_SECONDS = positiveInteger(
     env.ADMIN_SESSION_TTL_SECONDS,
     8 * 60 * 60,
@@ -95,6 +106,19 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
   if (Boolean(wechatAppId) !== Boolean(wechatAppSecret)) {
     throw new Error('WECHAT_APP_ID and WECHAT_APP_SECRET must be configured together');
   }
+
+  const databaseType = text(env.DB_TYPE) || text(env.REMOTE_DB_TYPE) || 'postgres';
+  const databaseSslMode = text(env.DB_SSL_MODE).toLowerCase() || 'disable';
+  if (!['disable', 'require', 'verify-full'].includes(databaseSslMode)) {
+    throw new Error('DB_SSL_MODE must be disable, require, or verify-full');
+  }
+  if (databaseType !== 'postgres' && databaseSslMode !== 'disable') {
+    throw new Error('DB_SSL_MODE is currently supported for PostgreSQL only');
+  }
+  if (databaseSslMode === 'verify-full' && !text(env.DB_SSL_CA_PATH) && !text(env.DB_SSL_CA)) {
+    throw new Error('DB_SSL_CA_PATH or DB_SSL_CA is required when DB_SSL_MODE=verify-full');
+  }
+  env.DB_SSL_MODE = databaseSslMode;
 
   if (nodeEnv !== 'production') return env;
 

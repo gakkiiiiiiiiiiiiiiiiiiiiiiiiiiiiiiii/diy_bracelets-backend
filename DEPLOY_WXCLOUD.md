@@ -44,13 +44,21 @@
 | `DB_USERNAME` | 数据库用户名 | 你的用户名 |
 | `DB_PASSWORD` | 数据库密码 | 你的密码 |
 | `DB_DATABASE` | 数据库名 | `diy_bracelets` |
-| `UPLOAD_DIR` | 上传文件目录（可选，默认 `./uploads`） | `/app/uploads` |
+| `UPLOAD_DIR` | 上传文件目录（仅在服务提供持久卷时使用） | `/app/uploads` |
+| `CORS_ORIGINS` | 管理端/H5 的明确 HTTPS Origin，禁止 `*` | `https://admin.example.com` |
+| `CORS_ALLOW_CREDENTIALS` | 管理端 Cookie 会话必需 | `true` |
+| `ADMIN_USERNAME` | 管理账号 | 不使用默认值 |
+| `ADMIN_PASSWORD_HASH` | `npm run auth:hash-password` 生成的 scrypt 哈希 | 不填写明文密码 |
+| `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | 微信登录凭据，必须成对配置 | 仅放服务端 Secret 配置 |
+| `DB_SSL_MODE` | 跨主机 PostgreSQL 建议使用 | `verify-full` |
+| `DB_SSL_CA_PATH` | 云数据库 CA 的只读挂载路径 | 由数据库平台提供 |
+| `DB_SSL_CA` | 无法挂载 CA 文件时使用的 PEM 文本 | 可用 `\n` 表示换行 |
 
-生产环境请勿使用默认密码，并确保数据库允许云托管所在 VPC/公网访问。
+生产环境请勿使用默认密码。数据库优先使用同地域私网与最小权限账号；若跨主机连接，启用证书校验，避免把数据库直接暴露到公网。
 
 ### 4. 发布
 
-版本状态为 **正常** 后，在 **版本管理** 中对该版本做 **全量发布**，即可通过服务提供的公网/内网地址访问 API。
+版本状态为 **正常** 后，先保持单实例和小流量，确认 migration、`/health/ready` 与生产冒烟检查通过，再逐步全量发布和扩容。
 
 ### 5. 小程序侧配置
 
@@ -94,14 +102,19 @@ docker run --rm -p 3008:80 \
   diy-bracelets-api
 ```
 
-浏览器访问 `http://localhost:3008/api/...` 验证接口。
+启动成功后执行只读冒烟检查：
+
+```bash
+API_BASE=http://127.0.0.1:3008 npm run smoke:production
+```
 
 ---
 
 ## 四、注意事项
 
 1. **数据库**：云托管仅运行容器，不提供 PostgreSQL。请使用腾讯云 PostgreSQL、云开发扩展或其它可被云托管访问的数据库，并在环境变量中正确配置。
-2. **上传目录**：容器内 `uploads` 为临时目录，重启后丢失。若需持久化文件，请使用对象存储（如 COS）并在代码中改为上传到 COS。
-3. **synchronize**：当前在 `NODE_ENV !== 'production'` 时会开启 TypeORM `synchronize`；生产环境为 `production` 时不会自动建表，请自行执行迁移或建表。
+2. **上传目录**：云容器内 `uploads` 通常是临时目录，重启或扩容后可能丢失/分叉。正式启用上传前必须选择持久卷或对象存储。对象存储属于按量计费资源，需先审批费用与请求架构，禁止用高频逐对象 HEAD 扫描。
+3. **migration**：生产启动会自动运行受版本控制的 migration，绝不能临时改成 `development` 或依赖 `synchronize` 建表。首次升级先单实例执行并确认成功，再扩容。
 4. **端口**：Dockerfile 中已设置 `PORT=80`，与微信云托管默认容器端口一致，无需在控制台再改监听端口（除非你自定义了端口）。
-5. **首次建表**：生产环境 `NODE_ENV=production` 时 TypeORM 不会自动建表。可选：首次部署时临时将 `NODE_ENV` 设为 `development` 让表自动创建（仅限空库），或使用 TypeORM 迁移脚本建表后再改回 `production`。
+5. **交易边界**：当前没有微信支付，订单是客服确认后的人工履约流程；支付接入和商户配置完成前不得把提交成功展示为“已支付”。
+6. **运行手册**：发布、备份、隔离恢复、监控和回滚步骤见 [`docs/OPERATIONS.md`](./docs/OPERATIONS.md)。

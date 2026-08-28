@@ -58,11 +58,36 @@ test('production configuration accepts explicit secure settings', () => {
 
   assert.equal(result.NODE_ENV, 'production');
   assert.equal(result.PORT, 3008);
+  assert.equal(result.DB_POOL_MAX, 10);
+  assert.equal(result.DB_SSL_MODE, 'disable');
   assert.deepEqual(
     parseCorsOrigins(result.CORS_ORIGINS),
     ['https://app.example.com', 'https://admin.example.com'],
   );
   assert.equal(parseTrustProxy(result.TRUST_PROXY), 1);
+});
+
+test('database TLS configuration requires a verified CA for verify-full', () => {
+  const base = {
+    NODE_ENV: 'production',
+    CORS_ORIGINS: 'https://admin.example.com',
+    ...secureAuth,
+    DB_HOST: 'database.example.com',
+    DB_USERNAME: 'bracelets',
+    DB_PASSWORD: 'a-long-random-password',
+    DB_DATABASE: 'bracelets',
+  };
+
+  assert.throws(
+    () => validateEnvironment({ ...base, DB_SSL_MODE: 'verify-full' }),
+    /DB_SSL_CA_PATH or DB_SSL_CA is required/,
+  );
+  const result = validateEnvironment({
+    ...base,
+    DB_SSL_MODE: 'verify-full',
+    DB_SSL_CA: '-----BEGIN CERTIFICATE-----\\nexample\\n-----END CERTIFICATE-----',
+  });
+  assert.equal(result.DB_SSL_MODE, 'verify-full');
 });
 
 test('trust proxy rejects the unsafe catch-all boolean setting', () => {

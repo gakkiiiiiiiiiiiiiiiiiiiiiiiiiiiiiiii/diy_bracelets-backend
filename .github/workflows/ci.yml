@@ -33,5 +33,15 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Validate operations assets
+        run: |
+          bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
+          ci_admin_hash=$(printf '%s' 'ci-admin-password' | npm run --silent auth:hash-password)
+          DB_PASSWORD=ci-database-password \
+            CORS_ORIGINS=https://admin.example.com \
+            ADMIN_USERNAME=ci-admin \
+            ADMIN_PASSWORD_HASH="$ci_admin_hash" \
+            docker compose config --quiet
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=moderate

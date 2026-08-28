@@ -8,6 +8,7 @@
 	"scripts": {
 		"build": "nest build",
 		"auth:hash-password": "node scripts/hash-admin-password.mjs",
+		"smoke:production": "node scripts/smoke-production.mjs",
 		"test": "npm run build && node --test test/*.test.cjs",
 		"dev:all": "node scripts/dev-all.mjs",
 		"rerender:previews": "npm run build && node scripts/rerender-product-images.mjs",

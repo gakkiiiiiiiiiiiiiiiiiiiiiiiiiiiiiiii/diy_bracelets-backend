@@ -34,6 +34,22 @@ async function bootstrap() {
     if (request.method === 'POST' && override === 'PATCH') request.method = 'PATCH';
     next();
   });
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    const startedAt = process.hrtime.bigint();
+    response.once('finish', () => {
+      if (request.path.startsWith('/health/')) return;
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      logger.log(JSON.stringify({
+        event: 'http_request',
+        requestId: String(response.getHeader('X-Request-Id') ?? ''),
+        method: request.method,
+        path: request.path,
+        statusCode: response.statusCode,
+        durationMs: Number(durationMs.toFixed(1)),
+      }));
+    });
+    next();
+  });
   app.use('/uploads', express.static(uploadDir, {
     dotfiles: 'deny',
     index: false,

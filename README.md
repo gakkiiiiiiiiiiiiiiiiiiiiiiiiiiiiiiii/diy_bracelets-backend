@@ -65,6 +65,12 @@ docker compose up -d --build
 | `DB_USERNAME` | postgres | 用户名 |
 | `DB_PASSWORD` | postgres | 密码 |
 | `DB_DATABASE` | diy_bracelets | 数据库名 |
+| `DB_POOL_MAX` | 10 | 单实例数据库连接池上限；按数据库总连接预算分配 |
+| `DB_CONNECTION_TIMEOUT_MS` | 5000 | 建立数据库连接的超时 |
+| `DB_STATEMENT_TIMEOUT_MS` | 15000 | PostgreSQL 查询与空闲事务超时 |
+| `DB_SSL_MODE` | disable | PostgreSQL TLS：`disable`、`require` 或 `verify-full` |
+| `DB_SSL_CA_PATH` | - | `verify-full` 时必填的只读 CA 证书路径 |
+| `DB_SSL_CA` | - | 无法挂载文件时使用的 PEM CA 文本，可用 `\n` 表示换行 |
 | `PORT` | 3000 | API 端口 |
 | `CORS_ORIGINS` | - | 生产必填，逗号分隔的前端/管理端 Origin，禁止 `*` |
 | `CORS_ALLOW_CREDENTIALS` | true | 生产必须开启，用于管理端 HttpOnly 会话 Cookie |
@@ -120,9 +126,13 @@ docker compose up -d --build
 
 生产镜像和 Compose 都使用 `/health/ready`。响应同时带有 `X-Request-Id`；API 默认启用 Helmet 安全头、严格 DTO 白名单和全局限流。
 
+非健康检查请求会输出不含查询参数和个人信息的结构化 `http_request` 日志，包含 requestId、方法、路径、状态码和耗时，便于聚合 5xx 与延迟指标。
+
 ## 数据库迁移
 
 生产启动时自动执行 `dist/database/migrations` 中尚未应用的 migration，并记录到 `app_migrations`。禁止在生产开启 `synchronize`。首次基线 migration 会创建缺失表，并可安全接管由旧版开发同步创建的已有表。
+
+多实例首次发布时先只启动一个实例完成 migration，确认 readiness 后再扩容。备份、隔离恢复演练、发布冒烟、监控与回滚步骤见 [生产运行手册](./docs/OPERATIONS.md)。
 
 ## 微信云托管部署
 

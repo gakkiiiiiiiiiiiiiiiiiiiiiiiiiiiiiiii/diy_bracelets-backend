@@ -38,6 +38,12 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD to a strong non-default value}
       DB_DATABASE: ${DB_DATABASE:-diy_bracelets}
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-5000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-15000}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_SSL_MODE: ${DB_SSL_MODE:-disable}
+      DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-}
+      DB_SSL_CA: ${DB_SSL_CA:-}
       UPLOAD_DIR: /app/uploads
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS to the comma-separated production frontend origins}
       CORS_ALLOW_CREDENTIALS: "true"
