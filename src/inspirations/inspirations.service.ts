@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { BraceletRenderService } from '../bracelet-agent/bracelet-render.service';
 import { BraceletCodeService } from '../bracelet-code/bracelet-code.service';
 import { DesignsService } from '../designs/designs.service';
 import type { DesignReviewStatus } from '../designs/entities/design.entity';
@@ -12,7 +11,6 @@ export class InspirationsService {
     private readonly designs: DesignsService,
     private readonly materials: MaterialsService,
     private readonly braceletCode: BraceletCodeService,
-    private readonly renderer: BraceletRenderService,
   ) {}
 
   listPublic() {
@@ -42,6 +40,31 @@ export class InspirationsService {
     if (!title) throw new BadRequestException('请为作品命名');
     if (!dto.orderedBeads.length) throw new BadRequestException('作品中没有可复现的珠子序列');
 
+    const materialRows = await this.materials.findByIds([...new Set(dto.orderedBeads.map((bead) => bead.materialId))]);
+    const byId = new Map(materialRows.map((material) => [material.id, material]));
+    const grouped = new Map<string, {
+      materialId: string; name: string; image: string; size: number; price: number; quantity: number;
+    }>();
+    for (const bead of dto.orderedBeads) {
+      const material = byId.get(bead.materialId);
+      const spec = material?.specs.find((candidate) => candidate.specId === bead.specId);
+      if (!material || material.status !== 'published' || !material.isAvailable || !spec) {
+        throw new BadRequestException(`素材或规格不可用: ${bead.materialId}/${bead.specId}`);
+      }
+      const key = `${material.id}\u0000${spec.specId}`;
+      const current = grouped.get(key);
+      if (current) current.quantity += 1;
+      else grouped.set(key, {
+        materialId: material.id,
+        name: material.name,
+        image: material.image,
+        size: Number(spec.size),
+        price: Number(spec.price),
+        quantity: 1,
+      });
+    }
+    const composition = [...grouped.values()];
+
     const braceletCode = this.braceletCode.encode({
       v: 1,
       wristCm: dto.wristCm ?? 16,
@@ -51,24 +74,14 @@ export class InspirationsService {
       source: 'user',
       title,
       author: dto.author?.trim() || '岛民',
-      composition: dto.composition,
+      image: composition[0]?.image ?? '',
+      composition,
       orderedBeads: dto.orderedBeads,
       wristCm: dto.wristCm ?? 16,
       braceletCode,
       isInspiration: true,
       reviewStatus: 'pending',
     }, userId);
-
-    const materialRows = await this.materials.findByIds([...new Set(dto.orderedBeads.map((bead) => bead.materialId))]);
-    const byId = new Map(materialRows.map((material) => [material.id, material]));
-    const renderBeads = dto.orderedBeads.flatMap((bead) => {
-      const material = byId.get(bead.materialId);
-      return material ? [{ material, specId: bead.specId }] : [];
-    });
-    if (renderBeads.length === dto.orderedBeads.length) {
-      const image = await this.renderer.render(`inspiration-${design.id}`, 0, renderBeads);
-      return this.designs.update(design.id, { image });
-    }
     return design;
   }
 

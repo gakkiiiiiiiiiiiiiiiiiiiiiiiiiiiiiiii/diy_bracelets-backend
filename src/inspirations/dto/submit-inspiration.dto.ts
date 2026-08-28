@@ -13,11 +13,11 @@ export class SubmitInspirationDto {
   author?: string;
 
   @IsArray()
-  @ArrayMinSize(1)
+  @IsOptional()
   @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => DesignCompositionDto)
-  composition: DesignCompositionDto[];
+  composition?: DesignCompositionDto[];
 
   @IsArray()
   @ArrayMinSize(1)

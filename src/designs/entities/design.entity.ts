@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import { DesignCompositionEmbed } from './design-composition.embed';
 
-export type DesignSource = 'designer' | 'user';
+export type DesignSource = 'designer' | 'user' | 'contest';
 export type DesignReviewStatus = 'pending' | 'approved' | 'rejected';
 
 @Entity('designs')
@@ -18,7 +18,7 @@ export class Design {
   @Column({ type: 'varchar', length: 36, nullable: true })
   ownerId: string | null;
 
-  /** designer=后台添加，user=用户发布 */
+  /** designer=设计师款，user=用户发布，contest=设计大赛专区 */
   @Column({ type: 'varchar', length: 20, default: 'designer' })
   source: DesignSource;
 

@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DesignsService } from '../designs/designs.service';
 import type { DesignSource } from '../designs/entities/design.entity';
+import type { DesignCompositionEmbed } from '../designs/entities/design-composition.embed';
 
 /** 设计广场列表项（与前端 PlazaItem 对齐） */
 export interface GoodsListItem {
@@ -10,15 +11,19 @@ export interface GoodsListItem {
   image: string;
   cta: string;
   usageCount: number;
+  composition: DesignCompositionEmbed[];
 }
 
 @Injectable()
 export class GoodsService {
   constructor(private readonly designsService: DesignsService) {}
 
-  /** 设计广场列表：tab=designer | user，默认 designer */
+  /** 设计广场列表：tab=designer | user | contest，默认 designer */
   async getGoods(tab?: string): Promise<{ items: GoodsListItem[] }> {
-    const source = (tab === 'user' ? 'user' : 'designer') as DesignSource;
+    const source = (tab || 'designer') as DesignSource;
+    if (!['designer', 'user', 'contest'].includes(source)) {
+      throw new BadRequestException('tab 仅支持 designer、user 或 contest');
+    }
     const list = await this.designsService.findPublicGoods(source);
     const items: GoodsListItem[] = list.map((d) => ({
       id: d.id,
@@ -27,6 +32,7 @@ export class GoodsService {
       image: d.image,
       cta: '查看实物',
       usageCount: d.usageCount,
+      composition: d.composition,
     }));
     return { items };
   }

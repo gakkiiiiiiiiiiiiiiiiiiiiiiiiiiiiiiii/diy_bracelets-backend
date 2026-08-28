@@ -33,8 +33,8 @@ export class OrderedDesignBeadDto {
 }
 
 export class CreateDesignDto {
-  @IsIn(['designer', 'user'])
-  source: 'designer' | 'user' = 'designer';
+  @IsIn(['designer', 'user', 'contest'])
+  source: 'designer' | 'user' | 'contest' = 'designer';
 
   @IsString() @MaxLength(80)
   title: string;

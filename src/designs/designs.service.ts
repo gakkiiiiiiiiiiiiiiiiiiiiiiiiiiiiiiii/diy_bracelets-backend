@@ -13,7 +13,7 @@ export class DesignsService {
     private readonly repo: Repository<Design>,
   ) {}
 
-  /** 设计广场列表：按 tab 筛选 designer | user */
+  /** 设计广场列表：按 tab 筛选 designer | user | contest */
   async findAll(tab?: DesignSource): Promise<Design[]> {
     const where = tab ? { source: tab } : {};
     return this.repo.find({
@@ -72,8 +72,9 @@ export class DesignsService {
 
   /** 使用该设计：usageCount +1，返回设计详情供前端套用 */
   async useDesign(id: string, publicOnly = false): Promise<Design> {
-    const design = publicOnly ? await this.findPublicOne(id) : await this.findOne(id);
-    await this.repo.update(id, { usageCount: design.usageCount + 1 });
+    if (publicOnly) await this.findPublicOne(id);
+    else await this.findOne(id);
+    await this.repo.increment({ id }, 'usageCount', 1);
     return publicOnly ? this.findPublicOne(id) : this.findOne(id);
   }
 
