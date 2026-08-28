@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
-const { mkdtempSync, rmSync } = require('node:fs');
+const { mkdtempSync, readdirSync, rmSync } = require('node:fs');
 const net = require('node:net');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
@@ -172,6 +172,40 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       body: JSON.stringify({ id: 'csrf', name: 'CSRF' }),
     });
     assert.equal(missingCsrf.status, 403);
+
+    const fakeImageForm = new FormData();
+    fakeImageForm.append('file', new Blob(['<html>not an image</html>'], { type: 'image/png' }), 'fake.png');
+    const rejectedFakeImage = await fetch(`${baseUrl}/api/admin/materials/upload`, {
+      method: 'POST',
+      headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },
+      body: fakeImageForm,
+    });
+    assert.equal(rejectedFakeImage.status, 400);
+    assert.equal(readdirSync(join(runtimeDir, 'uploads')).filter((name) => name.endsWith('.png')).length, 0);
+
+    const fakeExtractionForm = new FormData();
+    fakeExtractionForm.append('files', new Blob(['not an image'], { type: 'image/png' }), 'fake.png');
+    const rejectedFakeExtraction = await fetch(`${baseUrl}/api/admin/extraction-images`, {
+      method: 'POST',
+      headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },
+      body: fakeExtractionForm,
+    });
+    assert.equal(rejectedFakeExtraction.status, 400);
+
+    const validImageForm = new FormData();
+    validImageForm.append('file', new Blob([Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    )], { type: 'image/png' }), 'valid.png');
+    const uploadedImage = await fetch(`${baseUrl}/api/admin/materials/upload`, {
+      method: 'POST',
+      headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },
+      body: validImageForm,
+    });
+    assert.equal(uploadedImage.status, 201);
+    const uploadedImageBody = await uploadedImage.json();
+    assert.match(uploadedImageBody.path, /^\/uploads\/[0-9]+-[0-9a-f-]+\.png$/);
+    assert.equal((await fetch(`${baseUrl}${uploadedImageBody.path}`)).status, 200);
 
     const invalidOrderFilter = await fetch(`${baseUrl}/api/admin/orders?status=not-a-status`, {
       headers: { cookie: adminCookie },

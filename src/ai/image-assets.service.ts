@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
 import { extname, isAbsolute, join, relative, resolve } from 'path';
-import sharp from 'sharp';
+import sharp, { Metadata } from 'sharp';
 
 export interface LoadedImage {
   buffer: Buffer;
@@ -17,6 +17,8 @@ export class ImageAssetsService {
   readonly extractionSourceDir: string;
   readonly extractionOutputDir: string;
   private readonly frontendStaticDir: string;
+  private readonly maxImageBytes = 20 * 1024 * 1024;
+  private readonly maxImagePixels = 40_000_000;
 
   constructor(config: ConfigService) {
     this.uploadDir = resolve(config.get<string>('UPLOAD_DIR', join(process.cwd(), 'uploads')));
@@ -40,8 +42,16 @@ export class ImageAssetsService {
   }
 
   private localPath(sourceRef: string): string {
-    if (sourceRef.startsWith('/uploads/')) return resolve(this.uploadDir, sourceRef.slice('/uploads/'.length));
-    if (sourceRef.startsWith('/static/')) return resolve(this.frontendStaticDir, sourceRef.slice('/static/'.length));
+    if (sourceRef.startsWith('/uploads/')) {
+      const path = resolve(this.uploadDir, sourceRef.slice('/uploads/'.length));
+      if (!this.isInside(path, this.uploadDir)) throw new BadRequestException('图片路径不在允许目录内');
+      return path;
+    }
+    if (sourceRef.startsWith('/static/')) {
+      const path = resolve(this.frontendStaticDir, sourceRef.slice('/static/'.length));
+      if (!this.isInside(path, this.frontendStaticDir)) throw new BadRequestException('图片路径不在允许目录内');
+      return path;
+    }
     const path = resolve(isAbsolute(sourceRef) ? sourceRef : join(process.cwd(), sourceRef));
     if (![this.extractionSourceDir, this.uploadDir, this.frontendStaticDir].some((root) => this.isInside(path, root))) {
       throw new BadRequestException('图片路径不在允许目录内');
@@ -50,20 +60,32 @@ export class ImageAssetsService {
   }
 
   async load(sourceRef: string): Promise<LoadedImage> {
-    let buffer: Buffer;
     if (/^https?:\/\//i.test(sourceRef)) {
-      const response = await fetch(sourceRef, { signal: AbortSignal.timeout(30_000) });
-      if (!response.ok) throw new BadRequestException(`无法下载图片 ${response.status}`);
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength > 20 * 1024 * 1024) throw new BadRequestException('图片超过20MB');
-      buffer = Buffer.from(bytes);
-    } else {
-      const path = this.localPath(sourceRef);
-      if (!existsSync(path)) throw new BadRequestException(`图片不存在: ${sourceRef}`);
-      buffer = readFileSync(path);
+      throw new BadRequestException('不支持直接读取远程图片，请先通过后台上传');
     }
-    const metadata = await sharp(buffer).metadata();
-    const mime = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
+    const path = this.localPath(sourceRef);
+    if (!existsSync(path)) throw new BadRequestException(`图片不存在: ${sourceRef}`);
+    const stat = statSync(path);
+    if (!stat.isFile()) throw new BadRequestException('图片路径不是文件');
+    if (stat.size > this.maxImageBytes) throw new BadRequestException('图片超过20MB');
+    const buffer = readFileSync(path);
+    let metadata: Metadata;
+    try {
+      metadata = await sharp(buffer, { limitInputPixels: this.maxImagePixels }).metadata();
+    } catch {
+      throw new BadRequestException('图片内容无效或像素尺寸过大');
+    }
+    if (!metadata.width || !metadata.height || metadata.width * metadata.height > this.maxImagePixels) {
+      throw new BadRequestException('图片像素尺寸过大');
+    }
+    if ((metadata.pages ?? 1) > 1) throw new BadRequestException('不支持动画图片');
+    const mimeByFormat: Record<string, string> = {
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+    };
+    const mime = metadata.format ? mimeByFormat[metadata.format] : undefined;
+    if (!mime) throw new BadRequestException('只支持 PNG、JPG 和 WebP 图片');
     return { buffer, mime, sourceRef };
   }
 

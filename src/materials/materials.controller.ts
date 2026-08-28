@@ -12,13 +12,14 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
-import { mkdirSync } from 'fs';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { MaterialsService } from './materials.service';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
 import { Access } from '../auth/access.decorator';
+import { ImageAssetsService } from '../ai/image-assets.service';
 
 const storage = diskStorage({
   destination: (_req, _file, cb) => {
@@ -59,7 +60,10 @@ export class MaterialsController {
 @Access('admin')
 @Controller('api/admin/materials')
 export class AdminMaterialsController {
-  constructor(private readonly materialsService: MaterialsService) {}
+  constructor(
+    private readonly materialsService: MaterialsService,
+    private readonly images: ImageAssetsService,
+  ) {}
 
   @Get()
   findAll() {
@@ -100,9 +104,15 @@ export class AdminMaterialsController {
       },
     }),
   )
-  uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('未上传文件');
     const publicPath = `/uploads/${file.filename}`;
-    return { url: publicPath, path: publicPath };
+    try {
+      await this.images.load(publicPath);
+      return { url: publicPath, path: publicPath };
+    } catch {
+      if (existsSync(file.path)) unlinkSync(file.path);
+      throw new BadRequestException('图片内容无效，只支持真实的 PNG、JPG 和 WebP 文件');
+    }
   }
 }
