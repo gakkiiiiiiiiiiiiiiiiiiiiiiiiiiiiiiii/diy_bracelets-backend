@@ -140,6 +140,18 @@ docker compose up -d --build
 
 生产镜像和 Compose 都使用 `/health/ready`。响应同时带有 `X-Request-Id`；API 默认启用 Helmet 安全头、严格 DTO 白名单和全局限流。
 
+部署完整栈后运行一次人工冒烟（共 9 个轻量 GET，不是定时扫描）：
+
+```bash
+API_BASE=https://api.example.com \
+STATIC_BASE=https://static.example.com \
+ADMIN_BASE=https://admin.example.com \
+EXPECTED_ORIGIN=https://admin.example.com \
+npm run smoke:production
+```
+
+该命令同时验证 API 存活/就绪/公开目录、CORS 与请求 ID，静态资源跨域和缓存头，以及管理端健康检查、禁缓存与防嵌入响应头。静态资源或管理端尚未部署时可暂时省略对应变量，但正式上线验收必须三者都传入。
+
 非健康检查请求会输出不含查询参数和个人信息的结构化 `http_request` 日志，包含 requestId、方法、路径、状态码和耗时，便于聚合 5xx 与延迟指标。
 
 ## 数据库迁移
