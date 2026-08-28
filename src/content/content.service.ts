@@ -43,6 +43,17 @@ export class ContentService implements OnApplicationBootstrap {
     return config;
   }
 
+  async findPublished(key: string) {
+    const config = await this.findOne(key);
+    return {
+      key: config.key,
+      name: config.name,
+      publishedContent: config.isPublished ? config.publishedContent : null,
+      isPublished: config.isPublished,
+      publishedAt: config.publishedAt,
+    };
+  }
+
   async update(key: string, dto: UpdatePageConfigDto): Promise<PageConfig> {
     this.assertValidKey(key);
     await this.ensureDefaults();

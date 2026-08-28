@@ -56,7 +56,13 @@ async function bootstrap() {
     },
     credentials: parseBoolean(config.get('CORS_ALLOW_CREDENTIALS'), false),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-HTTP-Method-Override', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-CSRF-Token',
+      'X-HTTP-Method-Override',
+      'X-Request-Id',
+    ],
     exposedHeaders: ['X-Request-Id'],
   });
 

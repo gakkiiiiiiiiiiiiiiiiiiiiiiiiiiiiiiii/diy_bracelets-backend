@@ -13,19 +13,20 @@ export class MyDesignsService {
     private readonly repo: Repository<SavedDesign>,
   ) {}
 
-  async findAll(): Promise<SavedDesign[]> {
+  async findAll(userId: string): Promise<SavedDesign[]> {
     return this.repo.find({
+      where: { userId },
       order: { updatedAt: 'DESC' },
     });
   }
 
-  async findOne(id: string): Promise<SavedDesign> {
-    const row = await this.repo.findOne({ where: { id } });
+  async findOne(userId: string, id: string): Promise<SavedDesign> {
+    const row = await this.repo.findOne({ where: { id, userId } });
     if (!row) throw new NotFoundException(`SavedDesign ${id} not found`);
     return row;
   }
 
-  async create(dto: CreateMyDesignDto): Promise<SavedDesign> {
+  async create(userId: string, dto: CreateMyDesignDto): Promise<SavedDesign> {
     const composition: DesignCompositionEmbed[] = (dto.composition || []).map((c) => ({
       materialId: c.materialId,
       name: c.name,
@@ -35,12 +36,12 @@ export class MyDesignsService {
       quantity: c.quantity,
       amount: c.price * c.quantity,
     }));
-    const entity = this.repo.create({ title: dto.title, composition });
+    const entity = this.repo.create({ userId, title: dto.title, composition });
     return this.repo.save(entity);
   }
 
-  async update(id: string, dto: UpdateMyDesignDto): Promise<SavedDesign> {
-    await this.findOne(id);
+  async update(userId: string, id: string, dto: UpdateMyDesignDto): Promise<SavedDesign> {
+    await this.findOne(userId, id);
     const payload: Partial<SavedDesign> = {};
     if (dto.title !== undefined) payload.title = dto.title;
     if (dto.composition?.length !== undefined) {
@@ -54,12 +55,12 @@ export class MyDesignsService {
         amount: c.price * c.quantity,
       }));
     }
-    if (Object.keys(payload).length > 0) await this.repo.update(id, payload);
-    return this.findOne(id);
+    if (Object.keys(payload).length > 0) await this.repo.update({ id, userId }, payload);
+    return this.findOne(userId, id);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
-    await this.repo.delete(id);
+  async remove(userId: string, id: string): Promise<void> {
+    await this.findOne(userId, id);
+    await this.repo.delete({ id, userId });
   }
 }

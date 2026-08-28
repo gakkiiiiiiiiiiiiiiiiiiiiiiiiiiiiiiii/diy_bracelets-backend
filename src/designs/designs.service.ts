@@ -22,6 +22,13 @@ export class DesignsService {
     });
   }
 
+  async findPublicGoods(tab: DesignSource): Promise<Design[]> {
+    return this.repo.find({
+      where: { source: tab, reviewStatus: 'approved' },
+      order: { usageCount: 'DESC', createdAt: 'DESC' },
+    });
+  }
+
   async findInspirations(status: DesignReviewStatus = 'approved'): Promise<Design[]> {
     return this.repo.find({
       where: { isInspiration: true, reviewStatus: status },
@@ -57,15 +64,21 @@ export class DesignsService {
     return row;
   }
 
+  async findPublicOne(id: string): Promise<Design> {
+    const row = await this.repo.findOne({ where: { id, reviewStatus: 'approved' } });
+    if (!row) throw new NotFoundException(`Design ${id} not found`);
+    return row;
+  }
+
   /** 使用该设计：usageCount +1，返回设计详情供前端套用 */
-  async useDesign(id: string): Promise<Design> {
-    const design = await this.findOne(id);
+  async useDesign(id: string, publicOnly = false): Promise<Design> {
+    const design = publicOnly ? await this.findPublicOne(id) : await this.findOne(id);
     await this.repo.update(id, { usageCount: design.usageCount + 1 });
-    return this.findOne(id);
+    return publicOnly ? this.findPublicOne(id) : this.findOne(id);
   }
 
   /** 后台：新增设计师款/用户款 */
-  async create(dto: CreateDesignDto): Promise<Design> {
+  async create(dto: CreateDesignDto, ownerId: string | null = null): Promise<Design> {
     const composition: DesignCompositionEmbed[] = (dto.composition || []).map((c) => ({
       materialId: c.materialId,
       name: c.name,
@@ -76,6 +89,7 @@ export class DesignsService {
       amount: c.price * c.quantity,
     }));
     const entity = this.repo.create({
+      ownerId,
       source: dto.source || 'designer',
       title: dto.title,
       author: dto.author ?? '',

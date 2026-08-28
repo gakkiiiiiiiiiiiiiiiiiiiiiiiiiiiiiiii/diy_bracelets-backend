@@ -6,6 +6,7 @@ export type DesignProcessVideoStatus = 'queued' | 'rendering' | 'encoding' | 'co
 @Entity('design_process_videos')
 export class DesignProcessVideo {
   @PrimaryGeneratedColumn('uuid') id: string;
+  @Column({ type: 'varchar', length: 36, nullable: true }) ownerId: string | null;
   @Column({ type: 'varchar', length: 20, default: 'queued' }) status: DesignProcessVideoStatus;
   @Column({ type: 'int', default: 0 }) progress: number;
   @Column('simple-json') steps: DesignProcessStepDto[];

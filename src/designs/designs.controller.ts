@@ -2,8 +2,10 @@ import { Controller, Get, Post, Patch, Delete, Body, Param } from '@nestjs/commo
 import { DesignsService } from './designs.service';
 import { CreateDesignDto } from './dto/create-design.dto';
 import { UpdateDesignDto } from './dto/update-design.dto';
+import { Access } from '../auth/access.decorator';
 
 /** 管理端：设计师款 / 用户款 CRUD */
+@Access('admin')
 @Controller('api/designs')
 export class DesignsController {
   constructor(private readonly designsService: DesignsService) {}

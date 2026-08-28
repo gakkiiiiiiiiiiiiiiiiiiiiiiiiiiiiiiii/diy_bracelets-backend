@@ -6,7 +6,9 @@ import {
 } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { StorageHealthIndicator } from './storage.health';
+import { Access } from '../auth/access.decorator';
 
+@Access('public')
 @SkipThrottle()
 @Controller('health')
 export class HealthController {

@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ContentController } from './content.controller';
+import { AdminContentController, ContentController } from './content.controller';
 import { ContentService } from './content.service';
 import { PageConfig } from './entities/page-config.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([PageConfig])],
-  controllers: [ContentController],
+  controllers: [ContentController, AdminContentController],
   providers: [ContentService],
   exports: [ContentService],
 })

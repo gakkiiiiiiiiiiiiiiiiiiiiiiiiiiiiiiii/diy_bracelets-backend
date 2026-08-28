@@ -37,7 +37,7 @@ export class InspirationsService {
     return this.designs.useDesign(design.id);
   }
 
-  async submit(dto: SubmitInspirationDto) {
+  async submit(userId: string, dto: SubmitInspirationDto) {
     const title = dto.title.trim();
     if (!title) throw new BadRequestException('请为作品命名');
     if (!dto.orderedBeads.length) throw new BadRequestException('作品中没有可复现的珠子序列');
@@ -57,7 +57,7 @@ export class InspirationsService {
       braceletCode,
       isInspiration: true,
       reviewStatus: 'pending',
-    });
+    }, userId);
 
     const materialRows = await this.materials.findByIds([...new Set(dto.orderedBeads.map((bead) => bead.materialId))]);
     const byId = new Map(materialRows.map((material) => [material.id, material]));

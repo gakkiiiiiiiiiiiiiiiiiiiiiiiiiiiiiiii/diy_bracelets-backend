@@ -77,6 +77,14 @@ export class MaterialsService {
     return rows.map((row) => this.normalize(row));
   }
 
+  async findPublishedOne(id: string): Promise<Material> {
+    const row = await this.repo.findOne({
+      where: { id, status: 'published', isAvailable: true },
+    });
+    if (!row) throw new NotFoundException(`Material ${id} not found`);
+    return this.normalize(row);
+  }
+
   async findByIds(ids: string[]): Promise<Material[]> {
     if (!ids.length) return [];
     return (await this.repo.find({ where: { id: In(ids) } })).map((row) => this.normalize(row));

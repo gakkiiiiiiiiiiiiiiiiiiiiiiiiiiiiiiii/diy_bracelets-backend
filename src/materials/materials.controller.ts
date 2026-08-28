@@ -18,6 +18,7 @@ import { extname, join } from 'path';
 import { MaterialsService } from './materials.service';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
+import { Access } from '../auth/access.decorator';
 
 const storage = diskStorage({
   destination: (_req, _file, cb) => {
@@ -39,8 +40,25 @@ const allowedImageTypes = new Map([
   ['.gif', 'image/gif'],
 ]);
 
+@Access('public')
 @Controller('api/materials')
 export class MaterialsController {
+  constructor(private readonly materialsService: MaterialsService) {}
+
+  @Get()
+  findAll() {
+    return this.materialsService.findPublished();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.materialsService.findPublishedOne(id);
+  }
+}
+
+@Access('admin')
+@Controller('api/admin/materials')
+export class AdminMaterialsController {
   constructor(private readonly materialsService: MaterialsService) {}
 
   @Get()

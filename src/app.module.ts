@@ -22,6 +22,8 @@ import { InspirationsModule } from './inspirations/inspirations.module';
 import { DesignProcessVideosModule } from './design-process-videos/design-process-videos.module';
 import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
+import { SessionAuthGuard } from './auth/session-auth.guard';
 
 const migrations = [__dirname + '/database/migrations/*{.ts,.js}'];
 
@@ -89,6 +91,7 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       useFactory: getDatabaseConfig,
       inject: [ConfigService],
     }),
+    AuthModule,
     CategoriesModule,
     MaterialsModule,
     DesignsModule,
@@ -109,6 +112,7 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   providers: [
     Logger,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: SessionAuthGuard },
   ],
 })
 export class AppModule {}

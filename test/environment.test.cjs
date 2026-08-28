@@ -5,6 +5,13 @@ const {
   parseTrustProxy,
   validateEnvironment,
 } = require('../dist/config/environment.js');
+const { hashAdminPassword } = require('../dist/auth/password-hash.js');
+
+const secureAuth = {
+  CORS_ALLOW_CREDENTIALS: 'true',
+  ADMIN_USERNAME: 'production-admin',
+  ADMIN_PASSWORD_HASH: hashAdminPassword('a-secure-admin-password'),
+};
 
 test('production configuration rejects an open or missing CORS policy', () => {
   const base = {
@@ -27,6 +34,7 @@ test('production configuration rejects unsafe database defaults', () => {
     () => validateEnvironment({
       NODE_ENV: 'production',
       CORS_ORIGINS: 'https://admin.example.com',
+      ...secureAuth,
       DB_HOST: 'database',
       DB_USERNAME: 'postgres',
       DB_PASSWORD: 'postgres',
@@ -40,6 +48,7 @@ test('production configuration accepts explicit secure settings', () => {
   const result = validateEnvironment({
     NODE_ENV: 'production',
     CORS_ORIGINS: 'https://app.example.com, https://admin.example.com/',
+    ...secureAuth,
     TRUST_PROXY: '1',
     DB_HOST: 'database',
     DB_USERNAME: 'bracelets',

@@ -52,18 +52,24 @@ export class DesignProcessVideosService implements OnModuleInit {
     }
   }
 
-  async create(dto: CreateDesignProcessVideoDto): Promise<DesignProcessVideo> {
+  async create(userId: string, dto: CreateDesignProcessVideoDto): Promise<DesignProcessVideo> {
     const meaningful = dto.steps.filter((step) => step.action !== 'start');
     if (!meaningful.length) throw new BadRequestException('至少完成一次珠子操作后才能生成视频');
     const row = await this.jobs.save(this.jobs.create({
-      status: 'queued', progress: 0, steps: dto.steps, palette: dto.palette || null, wristCm: dto.wristCm || 16,
+      ownerId: userId, status: 'queued', progress: 0, steps: dto.steps, palette: dto.palette || null, wristCm: dto.wristCm || 16,
       videoUrl: null, durationMs: null, width: WIDTH, height: HEIGHT, error: null,
     }));
     this.schedule(row.id);
     return row;
   }
 
-  async findOne(id: string): Promise<DesignProcessVideo> {
+  async findOne(userId: string, id: string): Promise<DesignProcessVideo> {
+    const row = await this.jobs.findOne({ where: { id, ownerId: userId } });
+    if (!row) throw new NotFoundException('设计过程视频任务不存在');
+    return row;
+  }
+
+  private async findJob(id: string): Promise<DesignProcessVideo> {
     const row = await this.jobs.findOne({ where: { id } });
     if (!row) throw new NotFoundException('设计过程视频任务不存在');
     return row;
@@ -205,7 +211,7 @@ export class DesignProcessVideosService implements OnModuleInit {
   }
 
   private async process(id: string): Promise<void> {
-    const job = await this.findOne(id);
+    const job = await this.findJob(id);
     const jobDir = join(this.outputDir, id);
     const frameDir = join(jobDir, 'frames');
     try {

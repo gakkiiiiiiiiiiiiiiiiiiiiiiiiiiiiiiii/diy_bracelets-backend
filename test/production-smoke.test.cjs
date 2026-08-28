@@ -5,7 +5,9 @@ const { mkdtempSync, rmSync } = require('node:fs');
 const net = require('node:net');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+const { createHash, randomBytes } = require('node:crypto');
 const sqlite3 = require('sqlite3');
+const { hashAdminPassword } = require('../dist/auth/password-hash.js');
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -47,11 +49,41 @@ function migrationNames(databasePath) {
   });
 }
 
+function seedUserSession(databasePath, userId) {
+  const token = randomBytes(32).toString('base64url');
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const sessionId = randomBytes(16).toString('hex');
+  const externalIdHash = createHash('sha256').update(`openid-${userId}`).digest('hex');
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+
+  return new Promise((resolve, reject) => {
+    const database = new sqlite3.Database(databasePath);
+    database.configure('busyTimeout', 5_000);
+    database.serialize(() => {
+      database.run(
+        'insert into users (id, provider, externalIdHash, displayName, avatarUrl, lastLoginAt, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, 'wechat', externalIdHash, '', null, now, now, now],
+      );
+      database.run(
+        'insert into auth_sessions (id, subjectType, subjectId, tokenHash, csrfHash, expiresAt, revokedAt, createdAt) values (?, ?, ?, ?, ?, ?, ?, ?)',
+        [sessionId, 'user', userId, tokenHash, null, expiresAt, null, now],
+        (error) => {
+          database.close();
+          if (error) reject(error);
+          else resolve(token);
+        },
+      );
+    });
+  });
+}
+
 test('production server migrates an empty database and enforces HTTP safeguards', async () => {
   const runtimeDir = mkdtempSync(join(tmpdir(), 'diy-bracelets-production-'));
   const databasePath = join(runtimeDir, 'app.sqlite');
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
+  const adminPassword = 'production-smoke-password';
   let logs = '';
   const child = spawn(process.execPath, ['dist/main.js'], {
     cwd: join(__dirname, '..'),
@@ -65,6 +97,10 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       ALLOW_SQLITE_PRODUCTION: 'true',
       UPLOAD_DIR: join(runtimeDir, 'uploads'),
       CORS_ORIGINS: 'https://app.example.com',
+      CORS_ALLOW_CREDENTIALS: 'true',
+      ADMIN_USERNAME: 'production-admin',
+      ADMIN_PASSWORD_HASH: hashAdminPassword(adminPassword),
+      ADMIN_COOKIE_SECURE: 'true',
       TRUST_PROXY: 'false',
       RATE_LIMIT_MAX: '100',
       DB_CONNECT_RETRIES: '1',
@@ -97,16 +133,92 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     });
     assert.equal(denied.status, 403);
 
-    const invalidBody = await fetch(`${baseUrl}/api/categories`, {
+    const unauthenticatedMutation = await fetch(`${baseUrl}/api/categories`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id: 'invalid', name: 'Invalid', unexpected: true }),
     });
+    assert.equal(unauthenticatedMutation.status, 401);
+
+    const login = await fetch(`${baseUrl}/api/admin/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'production-admin', password: adminPassword }),
+    });
+    assert.equal(login.status, 200);
+    const loginBody = await login.json();
+    assert.ok(loginBody.csrfToken);
+    assert.equal('token' in loginBody, false);
+    const adminCookie = login.headers.get('set-cookie').split(';')[0];
+    assert.match(adminCookie, /^__Host-diy_admin_session=/);
+
+    const missingCsrf = await fetch(`${baseUrl}/api/categories`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ id: 'csrf', name: 'CSRF' }),
+    });
+    assert.equal(missingCsrf.status, 403);
+
+    const invalidBody = await fetch(`${baseUrl}/api/categories`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ id: 'invalid', name: 'Invalid', unexpected: true }),
+    });
     assert.equal(invalidBody.status, 400);
+
+    const createdCategory = await fetch(`${baseUrl}/api/categories`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ id: 'secure-category', name: 'Secure Category' }),
+    });
+    assert.equal(createdCategory.status, 201);
+
+    const publicContent = await fetch(`${baseUrl}/api/content/home`);
+    assert.equal(publicContent.status, 200);
+    const publicContentBody = await publicContent.json();
+    assert.equal('draftContent' in publicContentBody, false);
+
+    const firstUserToken = await seedUserSession(databasePath, '11111111-1111-4111-8111-111111111111');
+    const secondUserToken = await seedUserSession(databasePath, '22222222-2222-4222-8222-222222222222');
+    const createdDesign = await fetch(`${baseUrl}/api/my-designs`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ title: 'Private design', composition: [] }),
+    });
+    assert.equal(createdDesign.status, 201);
+    const createdDesignBody = await createdDesign.json();
+
+    const ownerList = await fetch(`${baseUrl}/api/my-designs`, {
+      headers: { authorization: `Bearer ${firstUserToken}` },
+    });
+    assert.equal(ownerList.status, 200);
+    assert.equal((await ownerList.json()).length, 1);
+
+    const otherList = await fetch(`${baseUrl}/api/my-designs`, {
+      headers: { authorization: `Bearer ${secondUserToken}` },
+    });
+    assert.equal(otherList.status, 200);
+    assert.deepEqual(await otherList.json(), []);
+
+    const crossUserRead = await fetch(`${baseUrl}/api/my-designs/${createdDesignBody.id}`, {
+      headers: { authorization: `Bearer ${secondUserToken}` },
+    });
+    assert.equal(crossUserRead.status, 404);
 
     assert.deepEqual(
       await migrationNames(databasePath),
-      ['InitialSchema1787884800000'],
+      ['InitialSchema1787884800000', 'AuthAndOwnership1787971200000'],
     );
   } finally {
     child.kill('SIGTERM');

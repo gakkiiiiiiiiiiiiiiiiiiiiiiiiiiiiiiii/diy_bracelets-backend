@@ -6,6 +6,7 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { CreateExtractionJobDto } from './dto/create-extraction-job.dto';
 import { ExtractionService } from './extraction.service';
+import { Access } from '../auth/access.decorator';
 
 const extractionStorage = diskStorage({
   destination: (_req, _file, callback) => {
@@ -20,6 +21,7 @@ const extractionStorage = diskStorage({
   },
 });
 
+@Access('admin')
 @Controller('api/admin')
 export class ExtractionController {
   constructor(private readonly service: ExtractionService) {}

@@ -44,7 +44,11 @@ npm run start:dev
 
 ```bash
 cp .env.example .env
-# 必须修改 DB_PASSWORD，并把 CORS_ORIGINS 改为真实的前端和管理端 HTTPS Origin
+# 必须修改 DB_PASSWORD、CORS_ORIGINS，并配置管理端账号和密码哈希
+# 安全读取密码并生成哈希（密码不会写入 shell 历史）：
+read -s "ADMIN_PASSWORD?Admin password: "
+printf %s "$ADMIN_PASSWORD" | npm run --silent auth:hash-password
+# 将输出写入 .env 的 ADMIN_PASSWORD_HASH，然后清除临时变量：unset ADMIN_PASSWORD
 docker compose config --quiet
 docker compose up -d --build
 ```
@@ -63,9 +67,16 @@ docker compose up -d --build
 | `DB_DATABASE` | diy_bracelets | 数据库名 |
 | `PORT` | 3000 | API 端口 |
 | `CORS_ORIGINS` | - | 生产必填，逗号分隔的前端/管理端 Origin，禁止 `*` |
+| `CORS_ALLOW_CREDENTIALS` | true | 生产必须开启，用于管理端 HttpOnly 会话 Cookie |
 | `TRUST_PROXY` | false | 代理跳数或命名子网；禁止直接配置为 `true` |
 | `RATE_LIMIT_TTL_MS` | 60000 | 全局限流窗口（毫秒） |
 | `RATE_LIMIT_MAX` | 120 | 单客户端每窗口最大请求数 |
+| `ADMIN_USERNAME` | - | 生产必填，管理端登录账号 |
+| `ADMIN_PASSWORD_HASH` | - | 生产必填，由 `npm run auth:hash-password` 生成的 scrypt 哈希 |
+| `ADMIN_SESSION_TTL_SECONDS` | 28800 | 管理端可撤销会话有效期 |
+| `ADMIN_COOKIE_SAME_SITE` | strict | 管理端 Cookie 的 SameSite 策略；跨站部署才改为 `none` |
+| `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | - | 微信小程序登录配置，必须成对配置且仅保存在后端 |
+| `USER_SESSION_TTL_SECONDS` | 2592000 | 微信用户自定义登录态有效期 |
 | `OPENAI_API_KEY` | - | 水晶识别、Imagegen 提取与图片参考搭配所需密钥 |
 | `OPENAI_VISION_MODEL` | gpt-5-mini | 视觉识别与结构化搭配模型 |
 | `OPENAI_IMAGE_MODEL` | gpt-image-2 | 单颗水晶珠提取模型 |
@@ -73,11 +84,20 @@ docker compose up -d --build
 | `EXTRACTION_SOURCE_DIR` | ../downloads/douyin-wufang-bracelets/carousel-originals | 已爬取轮播原图目录 |
 | `EXTRACTION_OUTPUT_DIR` | ./uploads/extractions | 可追溯提取产物目录 |
 
+## 认证与权限
+
+- 管理端：`POST /api/admin/auth/login` 校验账号密码后设置 `HttpOnly + Secure + __Host-` 会话 Cookie；所有写接口和 `/api/admin/**` 均要求管理会话，Cookie 写请求还必须携带登录响应中的 `X-CSRF-Token`。
+- 微信端：小程序通过 `wx.login` 取得一次性 code，提交到 `POST /api/auth/wechat`；后端调用微信 `code2Session`，只返回本系统可撤销会话，不会向客户端下发 `session_key` 或 OpenID。
+- 用户资源：`/api/my-designs` 与过程视频任务按当前用户 ID 查询；跨用户访问返回 404。
+- 默认策略：未显式声明为公开或用户接口的新路由自动按管理端权限保护，避免新增接口漏加鉴权。
+
 ## API
 
-- 分类：`GET/POST/PATCH/DELETE /api/categories`
-- 材料：`GET/POST/PATCH/DELETE /api/materials`
-- 上传：`POST /api/materials/upload`（form-data 字段 `file`）
+- 公开分类：`GET /api/categories`；分类写操作仍使用 `/api/categories`，需管理会话
+- 公开材料：`GET /api/materials`（仅已发布且可用）
+- 管理材料：`GET/POST/PATCH/DELETE /api/admin/materials`
+- 上传：`POST /api/admin/materials/upload`（form-data 字段 `file`）
+- 公开内容：`GET /api/content/:key`（不返回草稿）；草稿管理：`/api/admin/content`
 - 提取任务：`POST /api/admin/extraction-jobs`、`GET /api/admin/extraction-jobs/:id`
 - 提取结果：`GET /api/admin/extraction-results`、`POST /api/admin/extraction-results/:id/retry`
 - 搭配 Agent：`POST /api/admin/agent/generations`、`GET /api/admin/agent/generations/:id`

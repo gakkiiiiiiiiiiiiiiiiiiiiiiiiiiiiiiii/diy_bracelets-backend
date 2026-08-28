@@ -13,6 +13,9 @@ export class SavedDesign {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  userId: string | null;
+
   @Column()
   title: string;
 

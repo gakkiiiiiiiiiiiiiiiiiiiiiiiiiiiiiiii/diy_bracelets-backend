@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { BraceletAgentService } from './bracelet-agent.service';
 import { CreateAgentFeedbackDto, CreateAgentGenerationDto, RenderAgentBraceletDto } from './dto/agent.dto';
+import { Access } from '../auth/access.decorator';
 
+@Access('admin')
 @Controller('api/admin/agent')
 export class BraceletAgentController {
   constructor(private readonly service: BraceletAgentService) {}

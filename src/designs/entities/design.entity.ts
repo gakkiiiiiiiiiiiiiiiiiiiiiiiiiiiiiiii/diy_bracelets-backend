@@ -15,6 +15,9 @@ export class Design {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  ownerId: string | null;
+
   /** designer=后台添加，user=用户发布 */
   @Column({ type: 'varchar', length: 20, default: 'designer' })
   source: DesignSource;
