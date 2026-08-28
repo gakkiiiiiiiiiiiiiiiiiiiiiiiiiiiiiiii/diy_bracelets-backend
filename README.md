@@ -102,6 +102,14 @@ docker compose up -d --build
 - 提取结果：`GET /api/admin/extraction-results`、`POST /api/admin/extraction-results/:id/retry`
 - 搭配 Agent：`POST /api/admin/agent/generations`、`GET /api/admin/agent/generations/:id`
 - 手串代码：`POST /api/bracelet-code/encode`、`POST /api/bracelet-code/resolve`
+- 用户购物车：`GET/PUT /api/cart`；服务端按商品目录或已发布材料重新计价，单行最多 99 件
+- 用户地址：`GET/POST/PATCH/DELETE /api/addresses`；仅允许访问当前用户数据，并保证至多一个默认地址
+- 用户订单：`GET/POST /api/orders`、订单详情、提醒发货、确认收货与申请售后
+- 管理订单：`GET /api/admin/orders`、`PATCH /api/admin/orders/:id/status`；发货必须提供承运方和物流单号
+
+下单使用用户级幂等键防止重复订单，并在同一数据库事务中保存价格/地址/商品快照、移除已结算购物车项目。客户端提交的价格、名称和金额不会作为结算依据。当前订单是“客服确认后制作”的人工履约流程，不包含在线支付；接入微信支付前不得在客户端展示“已付款”。
+
+订单地址快照包含个人信息。生产数据库、备份和运维账号必须启用静态加密、最小权限与访问审计，日志不得输出完整地址、手机号、会话令牌或微信凭据。
 
 未配置 `OPENAI_API_KEY` 时，Imagegen 提取任务会以明确错误结束且不会发布素材；颜色搭配仍可通过本地确定性回退生成三套仅引用已发布素材的方案。
 

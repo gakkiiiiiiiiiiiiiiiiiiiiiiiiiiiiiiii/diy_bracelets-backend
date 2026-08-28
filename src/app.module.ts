@@ -24,6 +24,8 @@ import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionAuthGuard } from './auth/session-auth.guard';
+import { AddressesModule } from './addresses/addresses.module';
+import { OrdersModule } from './orders/orders.module';
 
 const migrations = [__dirname + '/database/migrations/*{.ts,.js}'];
 
@@ -92,12 +94,14 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       inject: [ConfigService],
     }),
     AuthModule,
+    AddressesModule,
     CategoriesModule,
     MaterialsModule,
     DesignsModule,
     HomeModule,
     GoodsModule,
     CartModule,
+    OrdersModule,
     ProfileModule,
     MyDesignsModule,
     ContentModule,

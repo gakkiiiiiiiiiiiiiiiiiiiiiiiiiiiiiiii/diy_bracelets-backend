@@ -29,6 +29,11 @@ async function bootstrap() {
     response.setHeader('X-Request-Id', requestId);
     next();
   });
+  app.use((request: Request, _response: Response, next: NextFunction) => {
+    const override = request.header('X-HTTP-Method-Override')?.toUpperCase();
+    if (request.method === 'POST' && override === 'PATCH') request.method = 'PATCH';
+    next();
+  });
   app.use('/uploads', express.static(uploadDir, {
     dotfiles: 'deny',
     index: false,
