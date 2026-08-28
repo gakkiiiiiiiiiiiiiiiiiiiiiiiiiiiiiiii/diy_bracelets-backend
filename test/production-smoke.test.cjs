@@ -310,6 +310,27 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     });
     assert.equal(immutableMaterialId.status, 400);
 
+    const archivedMaterial = await fetch(`${baseUrl}/api/admin/materials/source-clear-quartz`, {
+      method: 'DELETE',
+      headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },
+    });
+    assert.equal(archivedMaterial.status, 200);
+    const archivedMaterialBody = await archivedMaterial.json();
+    assert.equal(archivedMaterialBody.status, 'disabled');
+    assert.equal(archivedMaterialBody.isAvailable, false);
+    assert.equal((await fetch(`${baseUrl}/api/materials/source-clear-quartz`)).status, 404);
+
+    const restoredMaterial = await fetch(`${baseUrl}/api/admin/materials/source-clear-quartz`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ status: 'published', isAvailable: true }),
+    });
+    assert.equal(restoredMaterial.status, 200);
+
     const referencedCategoryDelete = await fetch(`${baseUrl}/api/categories/green-white-series`, {
       method: 'DELETE',
       headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },

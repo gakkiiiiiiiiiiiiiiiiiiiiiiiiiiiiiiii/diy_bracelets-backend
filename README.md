@@ -110,6 +110,7 @@ docker compose up -d --build
 - 公开材料：`GET /api/materials`（仅已发布且可用）
 - 标准商品目录：`GET /api/shop-products`（名称、价格与规格的服务端权威来源）
 - 管理材料：`GET/POST/PATCH/DELETE /api/admin/materials`
+- 删除材料采用可恢复的下架停用语义，不物理删除设计、购物车和历史订单仍可能引用的材料 ID
 - 上传：`POST /api/admin/materials/upload`（form-data 字段 `file`）
 - 公开内容：`GET /api/content/:key`（不返回草稿）；草稿管理：`/api/admin/content`
 - 提取任务：`POST /api/admin/extraction-jobs`、`GET /api/admin/extraction-jobs/:id`

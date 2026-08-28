@@ -105,8 +105,11 @@ export class MaterialsService {
     await this.aliasRepo.save(this.aliasRepo.create({ fromId, toId }));
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
-    await this.repo.delete(id);
+  async remove(id: string): Promise<Material> {
+    const material = await this.findOne(id);
+    material.status = 'disabled';
+    material.isAvailable = false;
+    await this.repo.save(material);
+    return this.findOne(id);
   }
 }
