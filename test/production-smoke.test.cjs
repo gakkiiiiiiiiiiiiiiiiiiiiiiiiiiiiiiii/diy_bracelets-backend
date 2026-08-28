@@ -193,6 +193,30 @@ test('production server migrates an empty database and enforces HTTP safeguards'
 
     const firstUserToken = await seedUserSession(databasePath, '11111111-1111-4111-8111-111111111111');
     const secondUserToken = await seedUserSession(databasePath, '22222222-2222-4222-8222-222222222222');
+
+    const initialProfile = await fetch(`${baseUrl}/api/profile`, {
+      headers: { authorization: `Bearer ${firstUserToken}` },
+    });
+    assert.equal(initialProfile.status, 200);
+    assert.equal((await initialProfile.json()).name, '珠岛用户');
+
+    const updatedProfile = await fetch(`${baseUrl}/api/profile`, {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ displayName: '月岛用户' }),
+    });
+    assert.equal(updatedProfile.status, 200);
+    assert.equal((await updatedProfile.json()).name, '月岛用户');
+
+    const secondProfile = await fetch(`${baseUrl}/api/profile`, {
+      headers: { authorization: `Bearer ${secondUserToken}` },
+    });
+    assert.equal(secondProfile.status, 200);
+    assert.equal((await secondProfile.json()).name, '珠岛用户');
+
     const createdDesign = await fetch(`${baseUrl}/api/my-designs`, {
       method: 'POST',
       headers: {

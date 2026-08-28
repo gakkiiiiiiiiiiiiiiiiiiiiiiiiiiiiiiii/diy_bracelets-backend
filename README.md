@@ -110,6 +110,7 @@ docker compose up -d --build
 - 手串代码：`POST /api/bracelet-code/encode`、`POST /api/bracelet-code/resolve`
 - 用户购物车：`GET/PUT /api/cart`；服务端按商品目录或已发布材料重新计价，单行最多 99 件
 - 用户地址：`GET/POST/PATCH/DELETE /api/addresses`；仅允许访问当前用户数据，并保证至多一个默认地址
+- 用户资料：`GET/PATCH /api/profile`；昵称绑定当前登录用户，不返回固定演示身份
 - 用户订单：`GET/POST /api/orders`、订单详情、提醒发货、确认收货与申请售后
 - 管理订单：`GET /api/admin/orders`、`PATCH /api/admin/orders/:id/status`；发货必须提供承运方和物流单号
 
