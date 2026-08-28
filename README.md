@@ -53,7 +53,7 @@ docker compose config --quiet
 docker compose up -d --build
 ```
 
-- API：<http://localhost:3000>
+- API：<http://localhost:3000>（Compose 将宿主机 `${PORT:-3000}` 映射到容器内 `3000`）
 - PostgreSQL：端口 `5432`，数据与上传文件持久化在 volume。
 
 环境变量（可在 `.env` 或 `docker-compose.yml` 中覆盖）：
@@ -71,7 +71,7 @@ docker compose up -d --build
 | `DB_SSL_MODE` | disable | PostgreSQL TLS：`disable`、`require` 或 `verify-full` |
 | `DB_SSL_CA_PATH` | - | `verify-full` 时必填的只读 CA 证书路径 |
 | `DB_SSL_CA` | - | 无法挂载文件时使用的 PEM CA 文本，可用 `\n` 表示换行 |
-| `PORT` | 3000 | API 端口 |
+| `PORT` | 3008（直接运行）/ 3000（Compose） | API 监听端口；Compose 会显式覆盖为容器内 3000 |
 | `UPLOAD_DIR` | ./uploads | 上传、提取、渲染产物目录 |
 | `UPLOAD_STORAGE_MODE` | ephemeral | 生产必须设为 `persistent`，并真实挂载持久卷 |
 | `CORS_ORIGINS` | - | 生产必填，逗号分隔的前端/管理端 Origin，禁止 `*` |
