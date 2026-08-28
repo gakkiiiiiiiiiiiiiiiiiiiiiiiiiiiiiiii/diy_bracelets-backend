@@ -89,7 +89,7 @@ export class DesignsService {
       isInspiration: dto.isInspiration ?? true,
       reviewStatus: dto.reviewStatus ?? 'approved',
       reviewNote: null,
-      reviewedAt: dto.reviewStatus === 'approved' ? new Date() : null,
+      reviewedAt: dto.reviewStatus === 'approved' ? new Date().toISOString() : null,
     });
     return this.repo.save(entity);
   }
@@ -127,7 +127,7 @@ export class DesignsService {
     await this.repo.update(id, {
       reviewStatus: status,
       reviewNote: note.trim() || null,
-      reviewedAt: new Date(),
+      reviewedAt: new Date().toISOString(),
     });
     return this.findOne(id);
   }

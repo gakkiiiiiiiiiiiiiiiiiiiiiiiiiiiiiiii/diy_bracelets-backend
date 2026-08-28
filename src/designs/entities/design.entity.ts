@@ -63,8 +63,8 @@ export class Design {
   @Column({ type: 'text', nullable: true })
   reviewNote: string | null;
 
-  @Column({ type: 'datetime', nullable: true })
-  reviewedAt: Date | null;
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  reviewedAt: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

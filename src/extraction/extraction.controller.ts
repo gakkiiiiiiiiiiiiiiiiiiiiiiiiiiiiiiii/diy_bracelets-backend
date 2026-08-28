@@ -1,18 +1,19 @@
 import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
-import { existsSync, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { CreateExtractionJobDto } from './dto/create-extraction-job.dto';
 import { ExtractionService } from './extraction.service';
 
-const uploadRoot = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
-const extractionSourceDir = join(uploadRoot, 'extraction-sources');
-if (!existsSync(extractionSourceDir)) mkdirSync(extractionSourceDir, { recursive: true });
-
 const extractionStorage = diskStorage({
-  destination: extractionSourceDir,
+  destination: (_req, _file, callback) => {
+    const uploadRoot = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+    const extractionSourceDir = join(uploadRoot, 'extraction-sources');
+    mkdirSync(extractionSourceDir, { recursive: true });
+    callback(null, extractionSourceDir);
+  },
   filename: (_req, file, callback) => {
     const extension = extname(file.originalname).toLowerCase() || (file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg');
     callback(null, `${Date.now()}-${randomUUID()}${extension}`);

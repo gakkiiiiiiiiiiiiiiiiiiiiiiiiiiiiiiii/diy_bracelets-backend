@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CategoriesModule } from './categories/categories.module';
 import { MaterialsModule } from './materials/materials.module';
 import { DesignsModule } from './designs/designs.module';
@@ -17,6 +20,10 @@ import { BraceletCodeModule } from './bracelet-code/bracelet-code.module';
 import { BraceletAgentModule } from './bracelet-agent/bracelet-agent.module';
 import { InspirationsModule } from './inspirations/inspirations.module';
 import { DesignProcessVideosModule } from './design-process-videos/design-process-videos.module';
+import { validateEnvironment } from './config/environment';
+import { HealthModule } from './health/health.module';
+
+const migrations = [__dirname + '/database/migrations/*{.ts,.js}'];
 
 function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
   const hasRemoteConfig = Boolean(config.get<string>('REMOTE_DB_HOST'));
@@ -27,8 +34,13 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
       type: 'sqlite',
       database: databasePath,
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      migrations,
+      migrationsRun: config.get('NODE_ENV') === 'production',
+      migrationsTableName: 'app_migrations',
       synchronize: config.get('NODE_ENV') !== 'production',
       logging: config.get('NODE_ENV') === 'development',
+      retryAttempts: config.get<number>('DB_CONNECT_RETRIES', 10),
+      retryDelay: config.get<number>('DB_CONNECT_RETRY_DELAY_MS', 3_000),
     };
   }
 
@@ -52,15 +64,27 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
     password,
     database,
     entities: [__dirname + '/**/*.entity{.ts,.js}'],
+    migrations,
+    migrationsRun: config.get('NODE_ENV') === 'production',
+    migrationsTableName: 'app_migrations',
     synchronize: config.get('NODE_ENV') !== 'production',
     logging: config.get('NODE_ENV') === 'development',
     charset: type === 'mysql' ? 'utf8mb4' : undefined,
+    retryAttempts: config.get<number>('DB_CONNECT_RETRIES', 10),
+    retryDelay: config.get<number>('DB_CONNECT_RETRY_DELAY_MS', 3_000),
   };
 }
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnvironment }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [{
+        ttl: config.get<number>('RATE_LIMIT_TTL_MS', 60_000),
+        limit: config.get<number>('RATE_LIMIT_MAX', 120),
+      }],
+    }),
     TypeOrmModule.forRootAsync({
       useFactory: getDatabaseConfig,
       inject: [ConfigService],
@@ -80,6 +104,11 @@ function getDatabaseConfig(config: ConfigService): TypeOrmModuleOptions {
     BraceletAgentModule,
     InspirationsModule,
     DesignProcessVideosModule,
+    HealthModule,
+  ],
+  providers: [
+    Logger,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}
