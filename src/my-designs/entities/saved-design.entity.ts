@@ -22,6 +22,9 @@ export class SavedDesign {
   @Column('simple-json')
   composition: DesignCompositionEmbed[];
 
+  @Column('simple-json', { nullable: true })
+  orderedBeads: Array<{ materialId: string; specId: string }> | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

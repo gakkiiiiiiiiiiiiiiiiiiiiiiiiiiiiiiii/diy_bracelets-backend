@@ -71,7 +71,7 @@ test('inspiration submissions ignore client prices and use the published materia
   assert.equal(created.ownerId, 'user-1');
   assert.equal(created.dto.title, '月光');
   assert.deepEqual(created.dto.composition, [{
-    materialId: 'amethyst', name: '紫水晶', image: '/static/amethyst.png', size: 8, price: 3.5, quantity: 2,
+    materialId: 'amethyst', specId: 'amethyst-8mm', name: '紫水晶', image: '/static/amethyst.png', size: 8, price: 3.5, quantity: 2,
   }]);
   assert.equal(created.dto.braceletCode, 'ZD1.server-authoritative');
 });

@@ -1,6 +1,6 @@
 import { ArrayMaxSize, IsString, IsOptional, IsArray, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { DesignCompositionDto } from '../../designs/dto/create-design.dto';
+import { DesignCompositionDto, OrderedDesignBeadDto } from '../../designs/dto/create-design.dto';
 
 export class UpdateMyDesignDto {
   @IsString()
@@ -14,4 +14,11 @@ export class UpdateMyDesignDto {
   @Type(() => DesignCompositionDto)
   @IsOptional()
   composition?: DesignCompositionDto[];
+
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => OrderedDesignBeadDto)
+  @IsOptional()
+  orderedBeads?: OrderedDesignBeadDto[];
 }

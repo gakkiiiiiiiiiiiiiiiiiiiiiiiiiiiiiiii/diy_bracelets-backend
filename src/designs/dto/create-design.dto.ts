@@ -5,6 +5,9 @@ export class DesignCompositionDto {
   @IsString() @MaxLength(120)
   materialId: string;
 
+  @IsOptional() @IsString() @MaxLength(120)
+  specId?: string;
+
   @IsString() @MaxLength(80)
   name: string;
 

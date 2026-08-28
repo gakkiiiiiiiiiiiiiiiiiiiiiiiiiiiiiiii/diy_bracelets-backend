@@ -82,6 +82,7 @@ export class DesignsService {
   async create(dto: CreateDesignDto, ownerId: string | null = null): Promise<Design> {
     const composition: DesignCompositionEmbed[] = (dto.composition || []).map((c) => ({
       materialId: c.materialId,
+      specId: c.specId,
       name: c.name,
       image: c.image,
       size: c.size,
@@ -116,6 +117,7 @@ export class DesignsService {
     if (dto.composition?.length) {
       payload.composition = dto.composition.map((c) => ({
         materialId: c.materialId,
+        specId: c.specId,
         name: c.name,
         image: c.image,
         size: c.size,

@@ -366,16 +366,37 @@ test('production server migrates an empty database and enforces HTTP safeguards'
         authorization: `Bearer ${firstUserToken}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ title: 'Private design', composition: [] }),
+      body: JSON.stringify({
+        title: 'Private design',
+        composition: [
+          { materialId: 'source-clear-quartz', specId: 'source-clear-quartz-6mm-0', name: '伪造白晶', image: '', size: 99, price: 0, quantity: 2 },
+          { materialId: 'source-uruguay-amethyst', specId: 'source-uruguay-amethyst-8mm-0', name: '伪造紫晶', image: '', size: 99, price: 0, quantity: 1 },
+        ],
+        orderedBeads: [
+          { materialId: 'source-clear-quartz', specId: 'source-clear-quartz-6mm-0' },
+          { materialId: 'source-uruguay-amethyst', specId: 'source-uruguay-amethyst-8mm-0' },
+          { materialId: 'source-clear-quartz', specId: 'source-clear-quartz-6mm-0' },
+        ],
+      }),
     });
     assert.equal(createdDesign.status, 201);
     const createdDesignBody = await createdDesign.json();
+    assert.deepEqual(createdDesignBody.orderedBeads.map((row) => row.materialId), [
+      'source-clear-quartz',
+      'source-uruguay-amethyst',
+      'source-clear-quartz',
+    ]);
+    assert.equal(createdDesignBody.composition[0].name, '净体白水晶');
+    assert.equal(createdDesignBody.composition[0].price, 3);
+    assert.equal(createdDesignBody.composition[0].quantity, 2);
 
     const ownerList = await fetch(`${baseUrl}/api/my-designs`, {
       headers: { authorization: `Bearer ${firstUserToken}` },
     });
     assert.equal(ownerList.status, 200);
-    assert.equal((await ownerList.json()).length, 1);
+    const ownerDesigns = await ownerList.json();
+    assert.equal(ownerDesigns.length, 1);
+    assert.deepEqual(ownerDesigns[0].orderedBeads, createdDesignBody.orderedBeads);
 
     const otherList = await fetch(`${baseUrl}/api/my-designs`, {
       headers: { authorization: `Bearer ${secondUserToken}` },
@@ -387,6 +408,29 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       headers: { authorization: `Bearer ${secondUserToken}` },
     });
     assert.equal(crossUserRead.status, 404);
+
+    const legacyDesignUpdate = await fetch(`${baseUrl}/api/my-designs/${createdDesignBody.id}`, {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        composition: [{
+          materialId: 'source-clear-quartz',
+          name: '旧客户端名称',
+          image: '',
+          size: 6,
+          price: 0,
+          quantity: 2,
+        }],
+      }),
+    });
+    assert.equal(legacyDesignUpdate.status, 200);
+    const legacyDesign = await legacyDesignUpdate.json();
+    assert.equal(legacyDesign.orderedBeads, null);
+    assert.equal(legacyDesign.composition[0].specId, 'source-clear-quartz-6mm-0');
+    assert.equal(legacyDesign.composition[0].name, '净体白水晶');
 
     const createdAddress = await fetch(`${baseUrl}/api/addresses`, {
       method: 'POST',
@@ -569,6 +613,7 @@ test('production server migrates an empty database and enforces HTTP safeguards'
         'Commerce1788057600000',
         'SeedReferenceCatalog1788144000000',
         'VideoRenderToken1788230400000',
+        'SavedDesignOrder1788323200000',
       ],
     );
   } finally {

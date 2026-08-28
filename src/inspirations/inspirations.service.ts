@@ -43,7 +43,7 @@ export class InspirationsService {
     const materialRows = await this.materials.findByIds([...new Set(dto.orderedBeads.map((bead) => bead.materialId))]);
     const byId = new Map(materialRows.map((material) => [material.id, material]));
     const grouped = new Map<string, {
-      materialId: string; name: string; image: string; size: number; price: number; quantity: number;
+      materialId: string; specId: string; name: string; image: string; size: number; price: number; quantity: number;
     }>();
     for (const bead of dto.orderedBeads) {
       const material = byId.get(bead.materialId);
@@ -56,6 +56,7 @@ export class InspirationsService {
       if (current) current.quantity += 1;
       else grouped.set(key, {
         materialId: material.id,
+        specId: spec.specId,
         name: material.name,
         image: material.image,
         size: Number(spec.size),
