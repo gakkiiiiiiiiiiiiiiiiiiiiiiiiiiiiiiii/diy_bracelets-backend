@@ -1,58 +1,72 @@
-import { IsString, IsOptional, IsArray, IsBoolean, IsNumber, IsIn, Min, Max, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsString, IsOptional, IsArray, IsBoolean, IsInt, IsNumber, IsIn, MaxLength, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class DesignCompositionDto {
-  @IsString()
+  @IsString() @MaxLength(120)
   materialId: string;
 
-  @IsString()
+  @IsString() @MaxLength(80)
   name: string;
 
-  @IsString()
+  @IsString() @MaxLength(500)
   image: string;
 
   @IsNumber()
   @Min(0)
+  @Max(100)
   size: number;
 
   @IsNumber()
   @Min(0)
+  @Max(1_000_000)
   price: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(300)
   quantity: number;
 }
 
 export class OrderedDesignBeadDto {
-  @IsString() materialId: string;
-  @IsString() specId: string;
+  @IsString() @MaxLength(120) materialId: string;
+  @IsString() @MaxLength(120) specId: string;
 }
 
 export class CreateDesignDto {
   @IsIn(['designer', 'user'])
   source: 'designer' | 'user' = 'designer';
 
-  @IsString()
+  @IsString() @MaxLength(80)
   title: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(40)
   author?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(500)
   image?: string;
 
   @IsArray()
   @IsOptional()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
   images?: string[];
 
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => DesignCompositionDto)
   composition: DesignCompositionDto[];
 
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => OrderedDesignBeadDto)
   orderedBeads?: OrderedDesignBeadDto[];
@@ -65,6 +79,7 @@ export class CreateDesignDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(4096)
   braceletCode?: string;
 
   @IsOptional()

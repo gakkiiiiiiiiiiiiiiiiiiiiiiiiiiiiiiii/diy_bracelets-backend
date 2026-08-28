@@ -1,17 +1,17 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 export class BraceletCodeBeadDto {
-  @IsString() materialId: string;
-  @IsString() specId: string;
+  @IsString() @MaxLength(120) materialId: string;
+  @IsString() @MaxLength(120) specId: string;
 }
 
 export class EncodeBraceletCodeDto {
   @IsNumber() @Min(8) @Max(40) wristCm: number;
-  @IsArray() @ValidateNested({ each: true }) @Type(() => BraceletCodeBeadDto) beads: BraceletCodeBeadDto[];
-  @IsOptional() @IsString() styleRef?: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(40) @ValidateNested({ each: true }) @Type(() => BraceletCodeBeadDto) beads: BraceletCodeBeadDto[];
+  @IsOptional() @IsString() @MaxLength(120) styleRef?: string;
 }
 
 export class ResolveBraceletCodeDto {
-  @IsString() code: string;
+  @IsString() @MaxLength(4096) code: string;
 }

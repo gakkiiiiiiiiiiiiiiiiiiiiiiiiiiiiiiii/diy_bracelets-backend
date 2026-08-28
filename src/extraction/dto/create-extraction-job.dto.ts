@@ -1,8 +1,10 @@
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsString, MaxLength } from 'class-validator';
 
 export class CreateExtractionJobDto {
-  @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(30)
   @IsString({ each: true })
-  sourceRefs?: string[];
+  @MaxLength(500, { each: true })
+  sourceRefs: string[];
 }

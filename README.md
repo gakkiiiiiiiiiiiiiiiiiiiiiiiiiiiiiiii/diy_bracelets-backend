@@ -87,6 +87,9 @@ docker compose up -d --build
 | `USER_SESSION_TTL_SECONDS` | 2592000 | 微信用户自定义登录态有效期 |
 | `DESIGN_PROCESS_VIDEO_ENABLED` | false | 显式启用服务端过程视频任务；默认关闭 |
 | `VIDEO_WEB_RENDER_URL` | - | 启用过程视频时必填，容器可访问的绝对 H5 设计页 URL |
+| `BRACELET_AGENT_ENABLED` | false | 显式启用管理端搭配任务；默认关闭 |
+| `AI_EXTRACTION_ENABLED` | false | 显式启用会调用 OpenAI 的素材提取；默认关闭 |
+| `AI_TASKS_SINGLE_INSTANCE` | false | 生产启用任一后台 AI 任务时必须为 true，并保证恰好一个任务执行实例 |
 | `OPENAI_API_KEY` | - | 水晶识别、Imagegen 提取与图片参考搭配所需密钥 |
 | `OPENAI_VISION_MODEL` | gpt-5-mini | 视觉识别与结构化搭配模型 |
 | `OPENAI_IMAGE_MODEL` | gpt-image-2 | 单颗水晶珠提取模型 |
@@ -124,7 +127,7 @@ docker compose up -d --build
 
 订单地址快照包含个人信息。生产数据库、备份和运维账号必须启用静态加密、最小权限与访问审计，日志不得输出完整地址、手机号、会话令牌或微信凭据。
 
-未配置 `OPENAI_API_KEY` 时，Imagegen 提取任务会以明确错误结束且不会发布素材；颜色搭配仍可通过本地确定性回退生成三套仅引用已发布素材的方案。
+后台 AI 任务默认全部关闭，不会在应用启动时恢复任务或产生外部请求。即使功能已开启，服务重启时也会把中断任务标记为失败而不自动再次调用模型。开启前先人工小批量验证，并按“单轮图片数 x 每张模型请求数 x 每日运行轮数”核算调用量；生产还必须设置 `AI_TASKS_SINGLE_INSTANCE=true`，保证只有一个后端实例执行任务。搭配任务与素材提取都只允许一个活动任务，单次提取最多 30 张，失败仅允许管理员手动重试。未配置 `OPENAI_API_KEY` 时不能开启 Imagegen 提取。
 
 后台图片处理只接受上传目录、前端静态目录或受控提取目录中的真实 PNG/JPG/WebP 文件；会检查文件内容、像素数量、大小和目录边界。远程 URL 必须先下载到管理员设备再上传，服务端不会代替用户抓取任意 URL，以避免 SSRF 和内网探测。
 

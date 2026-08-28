@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { DesignCompositionDto, OrderedDesignBeadDto } from '../../designs/dto/create-design.dto';
 
 export class SubmitInspirationDto {
@@ -13,11 +13,15 @@ export class SubmitInspirationDto {
   author?: string;
 
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => DesignCompositionDto)
   composition: DesignCompositionDto[];
 
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => OrderedDesignBeadDto)
   orderedBeads: OrderedDesignBeadDto[];
@@ -30,7 +34,7 @@ export class SubmitInspirationDto {
 }
 
 export class ReviewInspirationDto {
-  @IsString()
+  @IsIn(['approved', 'rejected'])
   status: 'approved' | 'rejected';
 
   @IsOptional()

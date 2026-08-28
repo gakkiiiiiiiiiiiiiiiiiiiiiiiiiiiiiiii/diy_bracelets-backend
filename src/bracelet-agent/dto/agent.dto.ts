@@ -1,27 +1,27 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 export class CreateAgentGenerationDto {
-  @IsOptional() @IsArray() @IsString({ each: true }) colors?: string[];
-  @IsOptional() @IsString() referenceImage?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(6) @IsString({ each: true }) @MaxLength(32, { each: true }) colors?: string[];
+  @IsOptional() @IsString() @MaxLength(500) referenceImage?: string;
   @IsOptional() @IsNumber() @Min(8) @Max(40) wristCm = 16;
 }
 
 class FeedbackBeadDto {
-  @IsString() materialId: string;
-  @IsString() specId: string;
+  @IsString() @MaxLength(120) materialId: string;
+  @IsString() @MaxLength(120) specId: string;
 }
 
 export class CreateAgentFeedbackDto {
-  @IsString() generationId: string;
+  @IsUUID() generationId: string;
   @IsIn(['accepted', 'modified', 'rejected']) action: 'accepted' | 'modified' | 'rejected';
   @IsOptional() @IsInt() @Min(0) @Max(2) candidateIndex?: number;
-  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => FeedbackBeadDto) finalBeads?: FeedbackBeadDto[];
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(40) @ValidateNested({ each: true }) @Type(() => FeedbackBeadDto) finalBeads?: FeedbackBeadDto[];
+  @IsOptional() @IsString() @MaxLength(1000) note?: string;
 }
 
 export class RenderAgentBraceletDto {
   @IsNumber() @Min(8) @Max(40) wristCm: number;
-  @IsArray() @ValidateNested({ each: true }) @Type(() => FeedbackBeadDto) beads: FeedbackBeadDto[];
-  @IsOptional() @IsString() styleRef?: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(40) @ValidateNested({ each: true }) @Type(() => FeedbackBeadDto) beads: FeedbackBeadDto[];
+  @IsOptional() @IsString() @MaxLength(120) styleRef?: string;
 }

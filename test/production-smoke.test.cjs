@@ -166,6 +166,40 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     const adminCookie = login.headers.get('set-cookie').split(';')[0];
     assert.match(adminCookie, /^__Host-diy_admin_session=/);
 
+    const agentProvider = await fetch(`${baseUrl}/api/admin/agent/provider`, {
+      headers: { cookie: adminCookie },
+    });
+    assert.equal(agentProvider.status, 200);
+    assert.equal((await agentProvider.json()).ready, false);
+
+    const extractionProvider = await fetch(`${baseUrl}/api/admin/extraction-provider`, {
+      headers: { cookie: adminCookie },
+    });
+    assert.equal(extractionProvider.status, 200);
+    assert.equal((await extractionProvider.json()).ready, false);
+
+    const disabledAgentTask = await fetch(`${baseUrl}/api/admin/agent/generations`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ colors: ['#ffffff'], wristCm: 16 }),
+    });
+    assert.equal(disabledAgentTask.status, 503);
+
+    const disabledExtractionTask = await fetch(`${baseUrl}/api/admin/extraction-jobs`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ sourceRefs: ['/uploads/not-used.png'] }),
+    });
+    assert.equal(disabledExtractionTask.status, 503);
+
     const missingCsrf = await fetch(`${baseUrl}/api/categories`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: adminCookie },

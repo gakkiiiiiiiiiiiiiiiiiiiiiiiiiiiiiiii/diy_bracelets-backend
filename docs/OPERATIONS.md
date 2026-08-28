@@ -11,6 +11,7 @@
 5. 发布前执行一次手工备份，并记录备份文件、SHA-256、数据库版本和恢复演练日期。
 6. 首次运行 migration 时只启动一个 API 实例；确认 migration 和 `/health/ready` 成功后再扩容，避免多个新实例竞争迁移。
 7. 过程视频保持 `DESIGN_PROCESS_VIDEO_ENABLED=false`，直到 Chromium、FFmpeg、持久存储和容器可访问的 `VIDEO_WEB_RENDER_URL` 均通过手工小批量验证；渲染页 Origin 必须加入 `CORS_ORIGINS`，前端入口也需单独显式开启。
+8. 搭配 Agent 与自动素材提取保持 `BRACELET_AGENT_ENABLED=false`、`AI_EXTRACTION_ENABLED=false`。若专项验收后启用，先确认单次批量、模型请求次数和预算告警，再设置 `AI_TASKS_SINGLE_INSTANCE=true` 并维持恰好一个任务执行实例；启动或重启不会自动重试中断任务。
 
 ## 发布与回滚
 
@@ -62,3 +63,4 @@ DB_HOST=... DB_USERNAME=... DB_PASSWORD=... DB_DATABASE=production_name \
 - H5 当前是演示构建，不具备生产用户登录和跨设备交易能力。
 - 真实发布仍需微信 AppID/Secret、合法 HTTPS 域名、真机登录及下单验收。
 - 过程视频是单进程内队列；虽然已限制每用户一个、全局十个活动任务，但多 API 实例仍会竞争恢复中的任务。未引入分布式租约前，启用该功能时必须保持一个任务执行实例。
+- 搭配 Agent 和素材提取也是单进程内队列，默认关闭且不会自动恢复中断任务。它们尚未使用分布式租约；启用时必须保持单任务执行实例，单次素材提取不得超过 30 张，并只允许管理员手动重试失败项。

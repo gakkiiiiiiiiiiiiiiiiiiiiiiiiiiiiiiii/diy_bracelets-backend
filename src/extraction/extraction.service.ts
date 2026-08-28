@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,11 +10,13 @@ import { MaterialsService } from '../materials/materials.service';
 import { CreateExtractionJobDto } from './dto/create-extraction-job.dto';
 import { ExtractionJob, ExtractionJobStatus } from './entities/extraction-job.entity';
 import { ExtractionResult } from './entities/extraction-result.entity';
+import { parseBoolean } from '../config/environment';
 
 @Injectable()
 export class ExtractionService implements OnModuleInit {
   private readonly logger = new Logger(ExtractionService.name);
   private queue: Promise<void> = Promise.resolve();
+  private readonly enabled: boolean;
 
   constructor(
     @InjectRepository(ExtractionJob) private readonly jobs: Repository<ExtractionJob>,
@@ -24,27 +26,55 @@ export class ExtractionService implements OnModuleInit {
     private readonly materials: MaterialsService,
     private readonly categories: CategoriesService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.enabled = parseBoolean(config.get('AI_EXTRACTION_ENABLED'), false);
+  }
 
   async onModuleInit(): Promise<void> {
+    if (!this.enabled) return;
     const unfinished = await this.jobs.find({ where: [
       { status: 'queued' }, { status: 'recognizing' }, { status: 'deduplicating' }, { status: 'extracting' },
       { status: 'removing_background' }, { status: 'validating' }, { status: 'publishing' },
     ] });
     for (const job of unfinished) {
-      job.status = 'queued'; job.error = null; await this.jobs.save(job); this.schedule(job.id);
+      job.status = 'failed';
+      job.error = '服务重启中断任务；为避免重复付费调用，系统未自动重试，请重新提交源图';
+      await this.jobs.save(job);
     }
   }
 
   async create(dto: CreateExtractionJobDto): Promise<ExtractionJob> {
-    const sourceRefs = dto.sourceRefs?.filter(Boolean) ?? [];
+    this.assertReady();
+    const sourceRefs = [...new Set(dto.sourceRefs?.filter(Boolean) ?? [])];
     if (!sourceRefs.length) throw new BadRequestException('请先上传需要提取的手串图片');
+    const active = await this.jobs.createQueryBuilder('job')
+      .where('job.status IN (:...statuses)', { statuses: ['queued', 'recognizing', 'deduplicating', 'extracting', 'removing_background', 'validating', 'publishing'] })
+      .getCount();
+    if (active > 0) throw new ConflictException('已有素材提取任务正在执行，请等待完成后再提交');
     const job = await this.jobs.save(this.jobs.create({ status: 'queued', sourceRefs, totalSources: sourceRefs.length }));
     this.schedule(job.id);
     return job;
   }
 
   findOne(id: string): Promise<ExtractionJob | null> { return this.jobs.findOne({ where: { id } }); }
+
+  providerStatus() {
+    const ready = this.enabled && this.ai.configured;
+    return {
+      provider: 'openai' as const,
+      enabled: this.enabled,
+      configured: this.ai.configured,
+      ready,
+      reason: ready ? '' : !this.enabled
+        ? '自动素材提取未启用（AI_EXTRACTION_ENABLED=false）'
+        : 'OPENAI_API_KEY 未配置',
+    };
+  }
+
+  private assertReady(): void {
+    if (!this.enabled) throw new ServiceUnavailableException('自动素材提取默认关闭，请由运维显式设置 AI_EXTRACTION_ENABLED=true');
+    if (!this.ai.configured) throw new ServiceUnavailableException('OPENAI_API_KEY 未配置，无法运行 Imagegen 提取');
+  }
 
   async listResults(jobId?: string): Promise<ExtractionResult[]> {
     return this.results.find({ where: jobId ? { jobId } : {}, order: { createdAt: 'DESC' }, take: 500 });
@@ -229,15 +259,27 @@ export class ExtractionService implements OnModuleInit {
   }
 
   async retry(resultId: string): Promise<ExtractionResult> {
+    this.assertReady();
     const result = await this.results.findOne({ where: { id: resultId } });
     if (!result) throw new NotFoundException('提取结果不存在');
+    if (result.status !== 'failed') throw new BadRequestException('仅失败的提取结果可以重试');
     const job = await this.jobs.findOne({ where: { id: result.jobId } });
     if (!job) throw new NotFoundException('提取任务不存在');
+    const active = await this.jobs.createQueryBuilder('activeJob')
+      .where('activeJob.status IN (:...statuses)', { statuses: ['queued', 'recognizing', 'deduplicating', 'extracting', 'removing_background', 'validating', 'publishing'] })
+      .getCount();
+    if (active > 0) throw new ConflictException('已有素材提取任务正在执行，请等待完成后再重试');
     result.status = 'detected'; result.error = null; result.attempts = 0; await this.results.save(result);
+    job.status = 'queued'; job.error = null; await this.jobs.save(job);
     this.queue = this.queue.then(async () => {
       const loaded = await this.images.load(result.sourceRef);
       await this.processCandidate(job, result, loaded.buffer, loaded.mime);
       job.status = 'complete'; await this.recount(job);
+    }).catch(async (error) => {
+      job.status = 'failed';
+      job.error = this.errorMessage(error);
+      await this.jobs.save(job);
+      this.logger.error(error);
     });
     return result;
   }

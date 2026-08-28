@@ -56,6 +56,8 @@ export class ExtractionController {
 
   @Post('extraction-jobs') create(@Body() dto: CreateExtractionJobDto) { return this.service.create(dto); }
 
+  @Get('extraction-provider') provider() { return this.service.providerStatus(); }
+
   @Get('extraction-jobs/:id')
   async findOne(@Param('id') id: string) {
     const job = await this.service.findOne(id);

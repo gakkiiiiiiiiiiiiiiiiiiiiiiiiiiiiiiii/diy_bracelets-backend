@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GeneratedBraceletCandidate } from '../ai/ai.types';
@@ -12,11 +13,13 @@ import { CreateAgentFeedbackDto, CreateAgentGenerationDto } from './dto/agent.dt
 import { RenderAgentBraceletDto } from './dto/agent.dto';
 import { AgentFeedback } from './entities/agent-feedback.entity';
 import { AgentGeneration } from './entities/agent-generation.entity';
+import { parseBoolean } from '../config/environment';
 
 @Injectable()
 export class BraceletAgentService implements OnModuleInit {
   private readonly logger = new Logger(BraceletAgentService.name);
   private queue: Promise<void> = Promise.resolve();
+  private readonly enabled: boolean;
 
   constructor(
     @InjectRepository(AgentGeneration) private readonly generations: Repository<AgentGeneration>,
@@ -26,16 +29,29 @@ export class BraceletAgentService implements OnModuleInit {
     private readonly images: ImageAssetsService,
     private readonly code: BraceletCodeService,
     private readonly renderer: BraceletRenderService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.enabled = parseBoolean(config.get('BRACELET_AGENT_ENABLED'), false);
+  }
 
   async onModuleInit(): Promise<void> {
+    if (!this.enabled) return;
     const rows = await this.generations.find({ where: [{ status: 'queued' }, { status: 'analyzing' }, { status: 'retrieving' }, { status: 'generating' }, { status: 'rendering' }] });
-    for (const row of rows) { row.status = 'queued'; await this.generations.save(row); this.schedule(row.id); }
+    for (const row of rows) {
+      row.status = 'failed';
+      row.error = '服务重启中断任务；为避免重复调用模型，系统未自动重试，请重新提交';
+      await this.generations.save(row);
+    }
   }
 
   async create(dto: CreateAgentGenerationDto): Promise<AgentGeneration> {
+    if (!this.enabled) throw new ServiceUnavailableException('搭配 Agent 默认关闭，请由运维显式设置 BRACELET_AGENT_ENABLED=true');
     if (!dto.referenceImage && !dto.colors?.length) throw new BadRequestException('请上传参考图片或至少选择一种颜色');
     if (!this.ai.configured) throw new ServiceUnavailableException('本地 Codex CLI 不可用，请检查 CODEX_CLI_PATH');
+    const active = await this.generations.createQueryBuilder('generation')
+      .where('generation.status IN (:...statuses)', { statuses: ['queued', 'analyzing', 'retrieving', 'generating', 'rendering'] })
+      .getCount();
+    if (active > 0) throw new ConflictException('已有搭配任务正在执行，请等待完成后再提交');
     const row = await this.generations.save(this.generations.create({
       status: 'queued', input: { colors: dto.colors || [], referenceImage: dto.referenceImage, wristCm: dto.wristCm || 16 }, candidates: null,
     }));
@@ -54,7 +70,18 @@ export class BraceletAgentService implements OnModuleInit {
     return this.generations.find({ order: { createdAt: 'DESC' }, take });
   }
 
-  providerStatus() { return this.ai.status(); }
+  providerStatus() {
+    const provider = this.ai.status();
+    const ready = this.enabled && provider.configured;
+    return {
+      ...provider,
+      enabled: this.enabled,
+      ready,
+      reason: ready ? '' : !this.enabled
+        ? '搭配 Agent 未启用（BRACELET_AGENT_ENABLED=false）'
+        : 'Codex CLI 不可用，请检查 CODEX_CLI_PATH',
+    };
+  }
 
   private schedule(id: string): void { this.queue = this.queue.then(() => this.process(id)).catch((error) => this.logger.error(error)); }
 

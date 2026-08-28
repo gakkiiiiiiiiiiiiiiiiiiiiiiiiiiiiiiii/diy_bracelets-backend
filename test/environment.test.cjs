@@ -88,11 +88,42 @@ test('production configuration accepts explicit secure settings', () => {
   assert.equal(result.DB_POOL_MAX, 10);
   assert.equal(result.DB_SSL_MODE, 'disable');
   assert.equal(result.UPLOAD_STORAGE_MODE, 'persistent');
+  assert.equal(result.BRACELET_AGENT_ENABLED, false);
+  assert.equal(result.AI_EXTRACTION_ENABLED, false);
   assert.deepEqual(
     parseCorsOrigins(result.CORS_ORIGINS),
     ['https://app.example.com', 'https://admin.example.com'],
   );
   assert.equal(parseTrustProxy(result.TRUST_PROXY), 1);
+});
+
+test('production AI tasks require explicit single-instance execution and provider credentials', () => {
+  const base = {
+    NODE_ENV: 'production',
+    CORS_ORIGINS: 'https://admin.example.com',
+    ...secureAuth,
+    DB_HOST: 'database',
+    DB_USERNAME: 'bracelets',
+    DB_PASSWORD: 'a-long-random-password',
+    DB_DATABASE: 'bracelets',
+  };
+
+  assert.throws(
+    () => validateEnvironment({ ...base, BRACELET_AGENT_ENABLED: 'true' }),
+    /AI_TASKS_SINGLE_INSTANCE=true/,
+  );
+  assert.throws(
+    () => validateEnvironment({ ...base, AI_EXTRACTION_ENABLED: 'true', AI_TASKS_SINGLE_INSTANCE: 'true' }),
+    /OPENAI_API_KEY/,
+  );
+  const result = validateEnvironment({
+    ...base,
+    AI_EXTRACTION_ENABLED: 'true',
+    AI_TASKS_SINGLE_INSTANCE: 'true',
+    OPENAI_API_KEY: 'test-provider-key',
+  });
+  assert.equal(result.AI_EXTRACTION_ENABLED, true);
+  assert.equal(result.AI_TASKS_SINGLE_INSTANCE, true);
 });
 
 test('database TLS configuration requires a verified CA for verify-full', () => {

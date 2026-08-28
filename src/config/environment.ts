@@ -94,6 +94,12 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
   );
   const designProcessVideoEnabled = parseBoolean(env.DESIGN_PROCESS_VIDEO_ENABLED, false);
   env.DESIGN_PROCESS_VIDEO_ENABLED = designProcessVideoEnabled;
+  const braceletAgentEnabled = parseBoolean(env.BRACELET_AGENT_ENABLED, false);
+  const aiExtractionEnabled = parseBoolean(env.AI_EXTRACTION_ENABLED, false);
+  const aiTasksSingleInstance = parseBoolean(env.AI_TASKS_SINGLE_INSTANCE, false);
+  env.BRACELET_AGENT_ENABLED = braceletAgentEnabled;
+  env.AI_EXTRACTION_ENABLED = aiExtractionEnabled;
+  env.AI_TASKS_SINGLE_INSTANCE = aiTasksSingleInstance;
 
   parseTrustProxy(env.TRUST_PROXY);
   const corsOrigins = parseCorsOrigins(env.CORS_ORIGINS);
@@ -158,6 +164,12 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
   }
   if (uploadStorageMode !== 'persistent') {
     throw new Error('Production requires UPLOAD_STORAGE_MODE=persistent and a durable UPLOAD_DIR mount');
+  }
+  if ((braceletAgentEnabled || aiExtractionEnabled) && !aiTasksSingleInstance) {
+    throw new Error('Production AI tasks require AI_TASKS_SINGLE_INSTANCE=true and exactly one backend task executor');
+  }
+  if (aiExtractionEnabled && !text(env.OPENAI_API_KEY)) {
+    throw new Error('AI_EXTRACTION_ENABLED=true requires OPENAI_API_KEY');
   }
   const adminUsername = text(env.ADMIN_USERNAME);
   const adminPasswordHash = text(env.ADMIN_PASSWORD_HASH);
