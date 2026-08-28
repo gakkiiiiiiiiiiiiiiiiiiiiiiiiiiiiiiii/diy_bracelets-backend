@@ -160,6 +160,8 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       body: JSON.stringify({ username: 'production-admin', password: adminPassword }),
     });
     assert.equal(login.status, 200);
+    assert.equal(login.headers.get('cache-control'), 'no-store');
+    assert.equal(login.headers.get('pragma'), 'no-cache');
     const loginBody = await login.json();
     assert.ok(loginBody.csrfToken);
     assert.equal('token' in loginBody, false);
@@ -332,6 +334,7 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       headers: { authorization: `Bearer ${firstUserToken}` },
     });
     assert.equal(initialProfile.status, 200);
+    assert.equal(initialProfile.headers.get('cache-control'), 'no-store');
     assert.equal((await initialProfile.json()).name, '珠岛用户');
 
     const updatedProfile = await fetch(`${baseUrl}/api/profile`, {

@@ -56,6 +56,11 @@ async function bootstrap() {
     maxAge: '1d',
     setHeaders: (response) => response.setHeader('X-Content-Type-Options', 'nosniff'),
   }));
+  app.use('/api', (_request: Request, response: Response, next: NextFunction) => {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('Pragma', 'no-cache');
+    next();
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
