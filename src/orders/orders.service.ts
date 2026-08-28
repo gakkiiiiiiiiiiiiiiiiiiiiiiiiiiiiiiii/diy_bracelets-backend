@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { AddressesService } from '../addresses/addresses.service';
 import { CartService } from '../cart/cart.service';
 import { CartItemEntity } from '../cart/entities/cart-item.entity';
@@ -118,15 +118,24 @@ export class OrdersService {
     if (last && Date.now() - last < 6 * 60 * 60 * 1_000) {
       throw new HttpException('请勿频繁提醒，客服已收到上一次请求', 429);
     }
-    order.remindedAt = new Date().toISOString();
-    return this.toApi(await this.orders.save(order));
+    const remindedAt = new Date().toISOString();
+    const result = await this.orders.update({
+      id: order.id,
+      userId,
+      status: order.status,
+      remindedAt: order.remindedAt === null ? IsNull() : order.remindedAt,
+    }, { remindedAt });
+    if (result.affected !== 1) {
+      throw new ConflictException('订单已更新，请刷新后重试');
+    }
+    return this.toApi(await this.findOwned(userId, id));
   }
 
   async confirmReceipt(userId: string, id: string) {
     const order = await this.findOwned(userId, id);
     if (order.status !== 'shipped') throw new ConflictException('只有已发货订单可以确认收货');
-    order.status = 'delivered';
-    return this.toApi(await this.orders.save(order));
+    await this.transitionStatus(order, 'delivered');
+    return this.toApi(await this.findOwned(userId, id));
   }
 
   async requestAfterSale(userId: string, id: string, dto: AfterSaleDto) {
@@ -134,9 +143,8 @@ export class OrdersService {
     if (!['shipped', 'delivered'].includes(order.status)) {
       throw new ConflictException('当前订单状态无法申请售后');
     }
-    order.status = 'after_sale';
-    order.afterSaleNote = dto.note.trim();
-    return this.toApi(await this.orders.save(order));
+    await this.transitionStatus(order, 'after_sale', { afterSaleNote: dto.note.trim() });
+    return this.toApi(await this.findOwned(userId, id));
   }
 
   async findAllAdmin(status?: OrderStatus) {
@@ -154,12 +162,25 @@ export class OrdersService {
     if (!ALLOWED_TRANSITIONS[order.status].includes(dto.status)) {
       throw new ConflictException(`不能从 ${STATUS_LABELS[order.status]} 变更为 ${STATUS_LABELS[dto.status]}`);
     }
-    order.status = dto.status;
+    const changes: Partial<Order> = {};
     if (dto.status === 'shipped') {
-      order.trackingCarrier = dto.trackingCarrier!.trim();
-      order.trackingNo = dto.trackingNo!.trim();
+      changes.trackingCarrier = dto.trackingCarrier!.trim();
+      changes.trackingNo = dto.trackingNo!.trim();
     }
-    return this.toApi(await this.orders.save(order), true);
+    await this.transitionStatus(order, dto.status, changes);
+    const updated = await this.orders.findOne({ where: { id } });
+    if (!updated) throw new NotFoundException('订单不存在');
+    return this.toApi(updated, true);
+  }
+
+  private async transitionStatus(order: Order, next: OrderStatus, changes: Partial<Order> = {}) {
+    const result = await this.orders.update(
+      { id: order.id, status: order.status },
+      { ...changes, status: next },
+    );
+    if (result.affected !== 1) {
+      throw new ConflictException('订单状态已变化，请刷新后重试');
+    }
   }
 
   private async findOwned(userId: string, id: string): Promise<Order> {
