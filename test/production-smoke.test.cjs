@@ -432,6 +432,39 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     assert.equal(legacyDesign.composition[0].specId, 'source-clear-quartz-6mm-0');
     assert.equal(legacyDesign.composition[0].name, '净体白水晶');
 
+    const quotaDesignBody = {
+      composition: [{
+        materialId: 'source-clear-quartz',
+        specId: 'source-clear-quartz-6mm-0',
+        name: '净体白水晶',
+        image: '',
+        size: 6,
+        price: 3,
+        quantity: 1,
+      }],
+      orderedBeads: [{ materialId: 'source-clear-quartz', specId: 'source-clear-quartz-6mm-0' }],
+    };
+    for (let slot = 2; slot <= 10; slot += 1) {
+      const saved = await fetch(`${baseUrl}/api/my-designs`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${firstUserToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ ...quotaDesignBody, title: `配额设计 ${slot}` }),
+      });
+      assert.equal(saved.status, 201);
+    }
+    const overQuotaDesign = await fetch(`${baseUrl}/api/my-designs`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ ...quotaDesignBody, title: '超额设计' }),
+    });
+    assert.equal(overQuotaDesign.status, 409);
+
     const createdAddress = await fetch(`${baseUrl}/api/addresses`, {
       method: 'POST',
       headers: {

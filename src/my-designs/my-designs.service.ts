@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { SavedDesign } from './entities/saved-design.entity';
 import { DesignCompositionEmbed } from '../designs/entities/design-composition.embed';
 import { CreateMyDesignDto } from './dto/create-my-design.dto';
@@ -9,6 +9,7 @@ import { MaterialsService } from '../materials/materials.service';
 import { DesignCompositionDto, OrderedDesignBeadDto } from '../designs/dto/create-design.dto';
 
 const MAX_SAVED_DESIGN_BEADS = 100;
+const MAX_SAVED_DESIGN_SLOTS = 10;
 
 @Injectable()
 export class MyDesignsService {
@@ -16,6 +17,7 @@ export class MyDesignsService {
     @InjectRepository(SavedDesign)
     private readonly repo: Repository<SavedDesign>,
     private readonly materials: MaterialsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async findAll(userId: string): Promise<SavedDesign[]> {
@@ -33,8 +35,27 @@ export class MyDesignsService {
 
   async create(userId: string, dto: CreateMyDesignDto): Promise<SavedDesign> {
     const canonical = await this.canonicalize(dto.composition || [], dto.orderedBeads);
-    const entity = this.repo.create({ userId, title: dto.title, ...canonical });
-    return this.repo.save(entity);
+    try {
+      return await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+        const count = await manager.count(SavedDesign, { where: { userId } });
+        if (count >= MAX_SAVED_DESIGN_SLOTS) {
+          throw new ConflictException(`每位用户最多保存 ${MAX_SAVED_DESIGN_SLOTS} 个设计`);
+        }
+        return manager.save(SavedDesign, manager.create(SavedDesign, {
+          userId,
+          title: dto.title,
+          ...canonical,
+        }));
+      });
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error
+        ? String((error as { code: unknown }).code)
+        : '';
+      if (['40001', 'SQLITE_BUSY', 'ER_LOCK_DEADLOCK'].includes(code)) {
+        throw new ConflictException('设计列表正在更新，请重试');
+      }
+      throw error;
+    }
   }
 
   async update(userId: string, id: string, dto: UpdateMyDesignDto): Promise<SavedDesign> {
