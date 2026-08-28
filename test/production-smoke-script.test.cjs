@@ -40,6 +40,7 @@ test('production smoke verifies API, public static assets, and admin security he
     response.setHeader('X-Request-Id', request.headers['x-request-id'] || '');
     response.setHeader('Access-Control-Allow-Origin', expectedOrigin);
     if (request.url === '/api/categories' || request.url === '/api/materials') response.end('[]');
+    else if (request.url === '/api/shop-products') response.end('{"items":[{"id":"product-1"}]}');
     else response.end('{"status":"ok"}');
   });
   const staticSite = await startServer((request, response) => {
@@ -70,9 +71,9 @@ test('production smoke verifies API, public static assets, and admin security he
     assert.equal(result.code, 0, result.stderr);
     const report = JSON.parse(result.stdout);
     assert.equal(report.status, 'ok');
-    assert.equal(report.requestCount, 9);
+    assert.equal(report.requestCount, 10);
     assert.deepEqual(report.checks.map((item) => item.target), [
-      'api', 'api', 'api', 'api', 'api', 'static', 'static', 'admin', 'admin',
+      'api', 'api', 'api', 'api', 'api', 'api', 'static', 'static', 'admin', 'admin',
     ]);
   } finally {
     await Promise.all([closeServer(api.server), closeServer(staticSite.server), closeServer(admin.server)]);

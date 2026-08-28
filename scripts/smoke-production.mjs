@@ -61,6 +61,7 @@ const apiChecks = [
   { path: '/health/ready', validate: (body) => body?.status === 'ok' },
   { path: '/api/categories', validate: Array.isArray },
   { path: '/api/materials', validate: Array.isArray },
+  { path: '/api/shop-products', validate: (body) => Array.isArray(body?.items) && body.items.length > 0 },
   { path: '/api/content/home', validate: (body) => body && typeof body === 'object' },
 ];
 

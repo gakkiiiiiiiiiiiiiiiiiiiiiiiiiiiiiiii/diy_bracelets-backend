@@ -327,6 +327,14 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     assert.equal(referenceMaterial.specs[0].specId, 'source-clear-quartz-6mm-0');
     assert.equal(referenceMaterial.specs[0].price, 3);
 
+    const publicProducts = await fetch(`${baseUrl}/api/shop-products`);
+    assert.equal(publicProducts.status, 200);
+    const productCatalog = await publicProducts.json();
+    assert.equal(productCatalog.items.length, 9);
+    const whiteBubbleProduct = productCatalog.items.find((row) => row.id === 'shop-white-bubble-bracelet');
+    assert.equal(whiteBubbleProduct.price, 280);
+    assert.deepEqual(whiteBubbleProduct.sizes, ['12mm']);
+
     const firstUserToken = await seedUserSession(databasePath, '11111111-1111-4111-8111-111111111111');
     const secondUserToken = await seedUserSession(databasePath, '22222222-2222-4222-8222-222222222222');
 

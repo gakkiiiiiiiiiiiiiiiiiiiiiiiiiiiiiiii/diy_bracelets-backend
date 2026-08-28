@@ -108,6 +108,7 @@ docker compose up -d --build
 
 - 公开分类：`GET /api/categories`；分类写操作仍使用 `/api/categories`，需管理会话
 - 公开材料：`GET /api/materials`（仅已发布且可用）
+- 标准商品目录：`GET /api/shop-products`（名称、价格与规格的服务端权威来源）
 - 管理材料：`GET/POST/PATCH/DELETE /api/admin/materials`
 - 上传：`POST /api/admin/materials/upload`（form-data 字段 `file`）
 - 公开内容：`GET /api/content/:key`（不返回草稿）；草稿管理：`/api/admin/content`
@@ -141,7 +142,7 @@ docker compose up -d --build
 
 生产镜像和 Compose 都使用 `/health/ready`。响应同时带有 `X-Request-Id`；API 默认启用 Helmet 安全头、严格 DTO 白名单和全局限流。
 
-部署完整栈后运行一次人工冒烟（共 9 个轻量 GET，不是定时扫描）：
+部署完整栈后运行一次人工冒烟（共 10 个轻量 GET，不是定时扫描）：
 
 ```bash
 API_BASE=https://api.example.com \
