@@ -5,6 +5,7 @@ import { Material } from './entities/material.entity';
 import { CreateMaterialDto } from './dto/create-material.dto';
 import { UpdateMaterialDto } from './dto/update-material.dto';
 import { MaterialAlias } from './entities/material-alias.entity';
+import { CategoriesService } from '../categories/categories.service';
 
 @Injectable()
 export class MaterialsService {
@@ -13,6 +14,7 @@ export class MaterialsService {
     private readonly repo: Repository<Material>,
     @InjectRepository(MaterialAlias)
     private readonly aliasRepo: Repository<MaterialAlias>,
+    private readonly categories: CategoriesService,
   ) {}
 
   private normalize(entity: Material): Material {
@@ -48,6 +50,7 @@ export class MaterialsService {
   }
 
   async create(dto: CreateMaterialDto): Promise<Material> {
+    await this.categories.findOne(dto.categoryId);
     const entity = this.normalize(this.repo.create({
       ...dto,
       generatedBy: dto.generatedBy ?? 'manual',
@@ -58,6 +61,7 @@ export class MaterialsService {
   }
 
   async update(id: string, dto: UpdateMaterialDto): Promise<Material> {
+    if (dto.categoryId) await this.categories.findOne(dto.categoryId);
     const current = await this.findOne(id);
     const manualOverrides = new Set(current.manualOverrides || []);
     if (current.generatedBy === 'imagegen') {

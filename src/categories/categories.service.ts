@@ -1,13 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Category } from './entities/category.entity';
+import { Material } from '../materials/entities/material.entity';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(Category)
     private readonly repo: Repository<Category>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async findAll(): Promise<Category[]> {
@@ -33,6 +35,10 @@ export class CategoriesService {
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
+    const materialCount = await this.dataSource.getRepository(Material).count({ where: { categoryId: id } });
+    if (materialCount > 0) {
+      throw new ConflictException(`分类下仍有 ${materialCount} 个材料，请先迁移或停用材料`);
+    }
     await this.repo.delete(id);
   }
 }

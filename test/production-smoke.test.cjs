@@ -269,6 +269,51 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     });
     assert.equal(createdCategory.status, 201);
 
+    const immutableCategoryId = await fetch(`${baseUrl}/api/categories/secure-category`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ id: 'renamed-category' }),
+    });
+    assert.equal(immutableCategoryId.status, 400);
+
+    const orphanMaterial = await fetch(`${baseUrl}/api/admin/materials`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({
+        id: 'orphan-material',
+        name: '孤儿材料',
+        image: '/static/missing.png',
+        categoryId: 'missing-category',
+        specs: [{ specId: 'orphan-8mm', size: 8, price: 1 }],
+      }),
+    });
+    assert.equal(orphanMaterial.status, 404);
+
+    const immutableMaterialId = await fetch(`${baseUrl}/api/admin/materials/source-clear-quartz`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        cookie: adminCookie,
+        'x-csrf-token': loginBody.csrfToken,
+      },
+      body: JSON.stringify({ id: 'renamed-material' }),
+    });
+    assert.equal(immutableMaterialId.status, 400);
+
+    const referencedCategoryDelete = await fetch(`${baseUrl}/api/categories/green-white-series`, {
+      method: 'DELETE',
+      headers: { cookie: adminCookie, 'x-csrf-token': loginBody.csrfToken },
+    });
+    assert.equal(referencedCategoryDelete.status, 409);
+
     const publicContent = await fetch(`${baseUrl}/api/content/home`);
     assert.equal(publicContent.status, 200);
     const publicContentBody = await publicContent.json();

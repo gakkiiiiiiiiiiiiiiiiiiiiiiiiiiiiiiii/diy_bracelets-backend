@@ -4,9 +4,10 @@ import { Material } from './entities/material.entity';
 import { MaterialsService } from './materials.service';
 import { AdminMaterialsController, MaterialsController } from './materials.controller';
 import { MaterialAlias } from './entities/material-alias.entity';
+import { CategoriesModule } from '../categories/categories.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Material, MaterialAlias])],
+  imports: [TypeOrmModule.forFeature([Material, MaterialAlias]), CategoriesModule],
   controllers: [MaterialsController, AdminMaterialsController],
   providers: [MaterialsService],
   exports: [MaterialsService],

@@ -1,4 +1,4 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { OmitType, PartialType } from '@nestjs/mapped-types';
 import { CreateMaterialDto } from './create-material.dto';
 
-export class UpdateMaterialDto extends PartialType(CreateMaterialDto) {}
+export class UpdateMaterialDto extends PartialType(OmitType(CreateMaterialDto, ['id'] as const)) {}
