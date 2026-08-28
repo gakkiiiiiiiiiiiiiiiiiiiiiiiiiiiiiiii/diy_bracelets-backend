@@ -1,12 +1,24 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { spawn } from 'child_process';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import WebSocket from 'ws';
 import { ImageAssetsService } from '../ai/image-assets.service';
+import { Material } from '../materials/entities/material.entity';
+import { MaterialsService } from '../materials/materials.service';
 import { CreateDesignProcessVideoDto } from './dto/design-process-video.dto';
 import { DesignProcessVideo } from './entities/design-process-video.entity';
 
@@ -20,6 +32,8 @@ const WEB_RENDER_STARTUP_TIMEOUT_MS = 60_000;
 const WEB_RENDER_MIN_CAPTURE_TIMEOUT_MS = 5 * 60_000;
 const WEB_RENDER_CAPTURE_TIMEOUT_PER_FRAME_MS = 1_000;
 const WEB_RENDER_CAPTURE_GRACE_MS = 90_000;
+const ACTIVE_STATUSES: DesignProcessVideo['status'][] = ['queued', 'rendering', 'encoding'];
+const MAX_ACTIVE_VIDEO_JOBS = 10;
 
 @Injectable()
 export class DesignProcessVideosService implements OnModuleInit {
@@ -28,21 +42,25 @@ export class DesignProcessVideosService implements OnModuleInit {
   private readonly ffmpegPath: string;
   private readonly chromePath: string;
   private readonly webRenderUrl: string;
+  private readonly enabled: boolean;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectRepository(DesignProcessVideo) private readonly jobs: Repository<DesignProcessVideo>,
     private readonly images: ImageAssetsService,
+    private readonly materials: MaterialsService,
     config: ConfigService,
   ) {
     this.outputDir = resolve(this.images.uploadDir, 'design-process-videos');
     this.ffmpegPath = config.get<string>('FFMPEG_PATH', 'ffmpeg');
     this.chromePath = config.get<string>('CHROME_PATH', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-    this.webRenderUrl = config.get<string>('VIDEO_WEB_RENDER_URL', 'http://127.0.0.1:5173/#/pages/design/design');
+    this.webRenderUrl = config.get<string>('VIDEO_WEB_RENDER_URL', '');
+    this.enabled = config.get<boolean>('DESIGN_PROCESS_VIDEO_ENABLED', false);
     if (!existsSync(this.outputDir)) mkdirSync(this.outputDir, { recursive: true });
   }
 
   async onModuleInit(): Promise<void> {
+    if (!this.enabled) return;
     const interrupted = await this.jobs.find({ where: [{ status: 'queued' }, { status: 'rendering' }, { status: 'encoding' }] });
     for (const job of interrupted) {
       job.status = 'queued';
@@ -53,10 +71,20 @@ export class DesignProcessVideosService implements OnModuleInit {
   }
 
   async create(userId: string, dto: CreateDesignProcessVideoDto): Promise<DesignProcessVideo> {
+    if (!this.enabled) throw new ServiceUnavailableException('过程视频功能尚未启用');
     const meaningful = dto.steps.filter((step) => step.action !== 'start');
     if (!meaningful.length) throw new BadRequestException('至少完成一次珠子操作后才能生成视频');
+    const [userActive, totalActive] = await Promise.all([
+      this.jobs.count({ where: { ownerId: userId, status: In(ACTIVE_STATUSES) } }),
+      this.jobs.count({ where: { status: In(ACTIVE_STATUSES) } }),
+    ]);
+    if (userActive > 0) throw new ConflictException('已有过程视频正在生成，请等待完成');
+    if (totalActive >= MAX_ACTIVE_VIDEO_JOBS) {
+      throw new ServiceUnavailableException('过程视频队列已满，请稍后重试');
+    }
+    const canonical = await this.canonicalize(dto);
     const row = await this.jobs.save(this.jobs.create({
-      ownerId: userId, status: 'queued', progress: 0, steps: dto.steps, palette: dto.palette || null, wristCm: dto.wristCm || 16,
+      ownerId: userId, status: 'queued', progress: 0, steps: canonical.steps, palette: canonical.palette, wristCm: dto.wristCm || 16,
       videoUrl: null, durationMs: null, width: WIDTH, height: HEIGHT, error: null,
     }));
     this.schedule(row.id);
@@ -67,6 +95,75 @@ export class DesignProcessVideosService implements OnModuleInit {
     const row = await this.jobs.findOne({ where: { id, ownerId: userId } });
     if (!row) throw new NotFoundException('设计过程视频任务不存在');
     return row;
+  }
+
+  async findForRender(id: string, token: string): Promise<Omit<DesignProcessVideo, 'renderTokenHash'>> {
+    if (!this.enabled || !/^[A-Za-z0-9_-]{40,128}$/.test(token)) {
+      throw new ForbiddenException('渲染令牌无效');
+    }
+    const row = await this.jobs.createQueryBuilder('job')
+      .addSelect('job.renderTokenHash')
+      .where('job.id = :id', { id })
+      .getOne();
+    if (!row?.renderTokenHash || !ACTIVE_STATUSES.includes(row.status)) {
+      throw new ForbiddenException('渲染令牌无效');
+    }
+    const actual = Buffer.from(this.hashToken(token), 'hex');
+    const expected = Buffer.from(row.renderTokenHash, 'hex');
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      throw new ForbiddenException('渲染令牌无效');
+    }
+    const { renderTokenHash: _renderTokenHash, ...safe } = row;
+    return safe;
+  }
+
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private resolveSpec(
+    material: Material,
+    requested: { specId?: string; size: number },
+  ) {
+    return material.specs.find((spec) => requested.specId && spec.specId === requested.specId)
+      ?? material.specs.find((spec) => Math.abs(Number(spec.size) - requested.size) < 0.001);
+  }
+
+  private async canonicalize(dto: CreateDesignProcessVideoDto): Promise<{
+    steps: CreateDesignProcessVideoDto['steps'];
+    palette: NonNullable<CreateDesignProcessVideoDto['palette']> | null;
+  }> {
+    const ids = [...new Set([
+      ...dto.steps.flatMap((step) => step.beads.map((bead) => bead.materialId)),
+      ...(dto.palette ?? []).map((item) => item.materialId),
+    ])];
+    const rows = await this.materials.findByIds(ids);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const canonicalItem = <T extends { materialId: string; specId?: string; size: number }>(item: T) => {
+      const material = byId.get(item.materialId);
+      if (!material || material.status !== 'published' || !material.isAvailable) {
+        throw new BadRequestException(`素材不可用: ${item.materialId}`);
+      }
+      const spec = this.resolveSpec(material, item);
+      if (!spec) throw new BadRequestException(`${material.name} 的规格不可用`);
+      return {
+        ...item,
+        materialId: material.id,
+        specId: spec.specId,
+        name: material.name,
+        image: material.image,
+        size: Number(spec.size),
+        price: Number(spec.price),
+      };
+    };
+
+    return {
+      steps: dto.steps.map((step) => ({
+        ...step,
+        beads: step.beads.map((bead, orderIndex) => ({ ...canonicalItem(bead), orderIndex })),
+      })),
+      palette: dto.palette?.map((item) => canonicalItem(item)) ?? null,
+    };
   }
 
   private async findJob(id: string): Promise<DesignProcessVideo> {
@@ -80,11 +177,15 @@ export class DesignProcessVideosService implements OnModuleInit {
   }
 
   /** 使用 DevTools 直接截取实际 DIY 页面，保证视频与网页的布局和 WebGL 完全同源。 */
-  private async renderWithWebClient(job: DesignProcessVideo): Promise<Buffer[]> {
+  private async renderWithWebClient(
+    job: DesignProcessVideo,
+    renderToken: string,
+    onFrame: (frame: Buffer, index: number, total: number) => void,
+  ): Promise<number> {
     if (!existsSync(this.chromePath)) throw new Error(`找不到 Chrome，请配置 CHROME_PATH: ${this.chromePath}`);
     const profileDir = join(this.outputDir, job.id, 'chrome-profile');
     const devToolsPortFile = join(profileDir, 'DevToolsActivePort');
-    const url = `${this.webRenderUrl}${this.webRenderUrl.includes('?') ? '&' : '?'}videoRenderJobId=${encodeURIComponent(job.id)}`;
+    const url = `${this.webRenderUrl}${this.webRenderUrl.includes('?') ? '&' : '?'}videoRenderJobId=${encodeURIComponent(job.id)}&videoRenderToken=${encodeURIComponent(renderToken)}`;
     const chrome = spawn(this.chromePath, [
       '--headless=new', '--no-sandbox', '--no-first-run', '--disable-background-networking', '--disable-sync',
       '--no-proxy-server', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader',
@@ -145,7 +246,7 @@ export class DesignProcessVideosService implements OnModuleInit {
         screenWidth: WIDTH, screenHeight: HEIGHT,
       });
 
-      const frames: Buffer[] = [];
+      let capturedFrames = 0;
       let totalFrames = 0;
       while (!totalFrames && Date.now() < startupDeadline && !exited) {
         const state = await call('Runtime.evaluate', {
@@ -163,22 +264,23 @@ export class DesignProcessVideosService implements OnModuleInit {
       );
       const captureDeadline = Date.now() + captureTimeout;
       let savedProgress = job.progress;
-      while (frames.length < totalFrames && Date.now() < captureDeadline) {
+      while (capturedFrames < totalFrames && Date.now() < captureDeadline) {
         if (exited) throw new Error(`网页渲染器提前退出${chromeError ? `: ${chromeError.slice(-500)}` : ''}`);
         const state = await call('Runtime.evaluate', {
           expression: 'document.documentElement.dataset.videoFrameSerial || ""',
           returnByValue: true,
         });
         const readyIndex = Number(state?.result?.value);
-        if (String(state?.result?.value) !== '' && readyIndex === frames.length) {
+        if (String(state?.result?.value) !== '' && readyIndex === capturedFrames) {
           const screenshot = await call('Page.captureScreenshot', {
             format: 'png', fromSurface: true, captureBeyondViewport: false,
           });
-          frames.push(Buffer.from(screenshot.data, 'base64'));
+          onFrame(Buffer.from(screenshot.data, 'base64'), capturedFrames, totalFrames);
+          capturedFrames += 1;
           await call('Runtime.evaluate', {
             expression: `document.documentElement.dataset.videoFrameAck = ${JSON.stringify(String(readyIndex))}`,
           });
-          const nextProgress = 3 + Math.round((frames.length / totalFrames) * 72);
+          const nextProgress = 3 + Math.round((capturedFrames / totalFrames) * 72);
           if (nextProgress !== savedProgress) {
             job.progress = nextProgress;
             await this.jobs.save(job);
@@ -188,8 +290,8 @@ export class DesignProcessVideosService implements OnModuleInit {
           await wait(8);
         }
       }
-      if (frames.length < totalFrames) throw new Error(`网页渲染超时，仅截取 ${frames.length}/${totalFrames} 帧`);
-      return frames;
+      if (capturedFrames < totalFrames) throw new Error(`网页渲染超时，仅截取 ${capturedFrames}/${totalFrames} 帧`);
+      return capturedFrames;
     } finally {
       if (socket?.readyState === 1) socket.close();
       if (!exited) chrome.kill('SIGTERM');
@@ -217,30 +319,38 @@ export class DesignProcessVideosService implements OnModuleInit {
     try {
       if (existsSync(jobDir)) rmSync(jobDir, { recursive: true, force: true });
       mkdirSync(frameDir, { recursive: true });
-      job.status = 'rendering'; job.progress = 2; job.error = null; await this.jobs.save(job);
-
-      const rendered = await this.renderWithWebClient(job);
+      const renderToken = randomBytes(32).toString('base64url');
+      job.status = 'rendering'; job.progress = 2; job.error = null;
+      job.renderTokenHash = this.hashToken(renderToken);
+      await this.jobs.save(job);
 
       let frameIndex = 0;
-      const writeFrame = (sourceIndex: number) => {
-        writeFileSync(join(frameDir, `${String(frameIndex).padStart(5, '0')}.png`), rendered[sourceIndex]);
+      let lastFrame: Buffer | null = null;
+      const writeFrame = (frame: Buffer) => {
+        writeFileSync(join(frameDir, `${String(frameIndex).padStart(5, '0')}.png`), frame);
         frameIndex += 1;
       };
 
-      for (let index = 0; index < INTRO_FRAMES; index += 1) writeFrame(0);
-      rendered.forEach((_, index) => writeFrame(index));
-      for (let index = 0; index < OUTRO_FRAMES; index += 1) writeFrame(rendered.length - 1);
+      await this.renderWithWebClient(job, renderToken, (frame, index) => {
+        if (index === 0) {
+          for (let intro = 0; intro < INTRO_FRAMES; intro += 1) writeFrame(frame);
+        }
+        writeFrame(frame);
+        lastFrame = frame;
+      });
+      if (!lastFrame) throw new Error('网页渲染器没有返回视频帧');
+      for (let outro = 0; outro < OUTRO_FRAMES; outro += 1) writeFrame(lastFrame!);
 
-      job.status = 'encoding'; job.progress = 88; await this.jobs.save(job);
+      job.status = 'encoding'; job.progress = 88; job.renderTokenHash = null; await this.jobs.save(job);
       const outputPath = join(jobDir, 'design-process.mp4');
       await this.runFfmpeg(join(frameDir, '%05d.png'), outputPath);
       rmSync(frameDir, { recursive: true, force: true });
-      job.status = 'complete'; job.progress = 100;
+      job.status = 'complete'; job.progress = 100; job.renderTokenHash = null;
       job.videoUrl = `/uploads/design-process-videos/${id}/design-process.mp4`;
       job.durationMs = Math.round((frameIndex / CAPTURE_FPS) * 1000);
       await this.jobs.save(job);
     } catch (error) {
-      job.status = 'failed'; job.error = error instanceof Error ? error.message : String(error);
+      job.status = 'failed'; job.error = error instanceof Error ? error.message : String(error); job.renderTokenHash = null;
       await this.jobs.save(job);
       this.logger.error(`design process video ${id} failed: ${job.error}`);
     }

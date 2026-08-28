@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { CreateDesignProcessVideoDto } from './dto/design-process-video.dto';
 import { DesignProcessVideosService } from './design-process-videos.service';
 import { Access } from '../auth/access.decorator';
@@ -15,7 +15,16 @@ export class DesignProcessVideosController {
   }
 
   @Get(':id')
-  findOne(@CurrentUserId() userId: string, @Param('id') id: string) {
+  findOne(@CurrentUserId() userId: string, @Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.service.findOne(userId, id);
+  }
+
+  @Get(':id/render')
+  @Access('public')
+  findForRender(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Headers('x-video-render-token') token = '',
+  ) {
+    return this.service.findForRender(id, token);
   }
 }

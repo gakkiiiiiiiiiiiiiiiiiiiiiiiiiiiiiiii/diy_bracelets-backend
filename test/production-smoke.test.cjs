@@ -136,6 +136,17 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     });
     assert.equal(denied.status, 403);
 
+    const renderPreflight = await fetch(`${baseUrl}/api/design-process-videos/11111111-1111-4111-8111-111111111111/render`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://app.example.com',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'x-video-render-token',
+      },
+    });
+    assert.equal(renderPreflight.status, 204);
+    assert.match(renderPreflight.headers.get('access-control-allow-headers'), /X-Video-Render-Token/i);
+
     const unauthenticatedMutation = await fetch(`${baseUrl}/api/categories`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -252,6 +263,32 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     assert.equal(canonicalCustomItem.price, 6);
     assert.equal(canonicalCustomItem.composition[0].size, 6);
     assert.equal(canonicalCustomItem.composition[0].price, 3);
+
+    const disabledVideoJob = await fetch(`${baseUrl}/api/design-process-videos`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        steps: [{
+          id: 'add-1',
+          action: 'add',
+          at: 1,
+          beads: [{
+            materialId: 'source-clear-quartz',
+            specId: 'source-clear-quartz-6mm-0',
+            name: '净体白水晶',
+            image: '/static/materials/reference-crystals/clear-quartz/clear-quartz-preview.png',
+            size: 6,
+            price: 3,
+            orderIndex: 0,
+          }],
+        }],
+        wristCm: 16,
+      }),
+    });
+    assert.equal(disabledVideoJob.status, 503);
 
     const createdDesign = await fetch(`${baseUrl}/api/my-designs`, {
       method: 'POST',
@@ -446,6 +483,7 @@ test('production server migrates an empty database and enforces HTTP safeguards'
         'AuthAndOwnership1787971200000',
         'Commerce1788057600000',
         'SeedReferenceCatalog1788144000000',
+        'VideoRenderToken1788230400000',
       ],
     );
   } finally {

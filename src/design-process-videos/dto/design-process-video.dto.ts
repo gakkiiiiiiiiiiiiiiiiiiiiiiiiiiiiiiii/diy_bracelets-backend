@@ -1,38 +1,41 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsIn,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Max,
   Min,
   ValidateNested,
 } from 'class-validator';
 
 export class DesignProcessBeadDto {
-  @IsOptional() @IsString() id?: string;
-  @IsString() materialId: string;
-  @IsString() specId: string;
-  @IsString() name: string;
-  @IsString() image: string;
+  @IsOptional() @IsString() @MaxLength(120) id?: string;
+  @IsString() @MaxLength(255) materialId: string;
+  @IsString() @MaxLength(100) specId: string;
+  @IsString() @MaxLength(120) name: string;
+  @IsString() @MaxLength(1_000) image: string;
   @IsNumber() @Min(4) @Max(30) size: number;
   @IsNumber() @Min(0) @Max(100000) price: number;
   @IsOptional() @IsInt() @Min(0) orderIndex?: number;
 }
 
 export class DesignProcessPaletteItemDto {
-  @IsString() materialId: string;
-  @IsString() name: string;
-  @IsString() image: string;
+  @IsString() @MaxLength(255) materialId: string;
+  @IsOptional() @IsString() @MaxLength(100) specId?: string;
+  @IsString() @MaxLength(120) name: string;
+  @IsString() @MaxLength(1_000) image: string;
   @IsNumber() @Min(4) @Max(30) size: number;
   @IsNumber() @Min(0) @Max(100000) price: number;
 }
 
 export class DesignProcessStepDto {
-  @IsString() id: string;
+  @IsString() @MaxLength(120) id: string;
   @IsIn(['start', 'add', 'move', 'remove', 'replace', 'clear', 'apply'])
   action: 'start' | 'add' | 'move' | 'remove' | 'replace' | 'clear' | 'apply';
   @IsNumber() at: number;
@@ -43,7 +46,7 @@ export class DesignProcessStepDto {
 }
 
 export class CreateDesignProcessVideoDto {
-  @IsArray() @ArrayMaxSize(120) @ValidateNested({ each: true }) @Type(() => DesignProcessStepDto)
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(120) @ValidateNested({ each: true }) @Type(() => DesignProcessStepDto)
   steps: DesignProcessStepDto[];
   @IsOptional() @IsArray() @ArrayMaxSize(12) @ValidateNested({ each: true }) @Type(() => DesignProcessPaletteItemDto)
   palette?: DesignProcessPaletteItemDto[];

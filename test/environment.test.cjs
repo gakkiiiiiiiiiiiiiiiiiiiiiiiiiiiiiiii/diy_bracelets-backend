@@ -121,3 +121,23 @@ test('database TLS configuration requires a verified CA for verify-full', () => 
 test('trust proxy rejects the unsafe catch-all boolean setting', () => {
   assert.throws(() => parseTrustProxy('true'), /too broad/);
 });
+
+test('production video rendering is opt-in and requires an absolute render URL', () => {
+  const base = {
+    NODE_ENV: 'production',
+    CORS_ORIGINS: 'https://admin.example.com',
+    ...secureAuth,
+    DB_HOST: 'database',
+    DB_USERNAME: 'app',
+    DB_PASSWORD: 'a-long-random-password',
+    DB_DATABASE: 'bracelets',
+    DESIGN_PROCESS_VIDEO_ENABLED: 'true',
+  };
+
+  assert.throws(() => validateEnvironment(base), /VIDEO_WEB_RENDER_URL/);
+  const result = validateEnvironment({
+    ...base,
+    VIDEO_WEB_RENDER_URL: 'https://app.example.com/#/pages/design/design',
+  });
+  assert.equal(result.DESIGN_PROCESS_VIDEO_ENABLED, true);
+});

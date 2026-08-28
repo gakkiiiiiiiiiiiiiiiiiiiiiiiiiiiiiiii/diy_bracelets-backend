@@ -85,6 +85,8 @@ docker compose up -d --build
 | `ADMIN_COOKIE_SAME_SITE` | strict | 管理端 Cookie 的 SameSite 策略；跨站部署才改为 `none` |
 | `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | - | 生产必填的微信小程序登录配置，仅保存在后端 |
 | `USER_SESSION_TTL_SECONDS` | 2592000 | 微信用户自定义登录态有效期 |
+| `DESIGN_PROCESS_VIDEO_ENABLED` | false | 显式启用服务端过程视频任务；默认关闭 |
+| `VIDEO_WEB_RENDER_URL` | - | 启用过程视频时必填，容器可访问的绝对 H5 设计页 URL |
 | `OPENAI_API_KEY` | - | 水晶识别、Imagegen 提取与图片参考搭配所需密钥 |
 | `OPENAI_VISION_MODEL` | gpt-5-mini | 视觉识别与结构化搭配模型 |
 | `OPENAI_IMAGE_MODEL` | gpt-image-2 | 单颗水晶珠提取模型 |
@@ -123,6 +125,8 @@ docker compose up -d --build
 订单地址快照包含个人信息。生产数据库、备份和运维账号必须启用静态加密、最小权限与访问审计，日志不得输出完整地址、手机号、会话令牌或微信凭据。
 
 未配置 `OPENAI_API_KEY` 时，Imagegen 提取任务会以明确错误结束且不会发布素材；颜色搭配仍可通过本地确定性回退生成三套仅引用已发布素材的方案。
+
+过程视频默认关闭。启用时必须提供 Chromium、FFmpeg 和容器可访问的 H5 设计页；同一用户最多一个活动任务，全局最多十个。渲染器使用随机内部令牌读取经过服务端目录校验的素材快照，并把截图逐帧落盘，避免信任客户端图片 URL 或在内存中累积整段视频帧。
 
 ## 生产健康检查
 

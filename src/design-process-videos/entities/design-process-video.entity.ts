@@ -17,6 +17,7 @@ export class DesignProcessVideo {
   @Column({ type: 'int', default: 720 }) width: number;
   @Column({ type: 'int', default: 1280 }) height: number;
   @Column({ type: 'text', nullable: true }) error: string | null;
+  @Column({ type: 'varchar', length: 64, nullable: true, select: false }) renderTokenHash: string | null;
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
 }

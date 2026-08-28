@@ -83,6 +83,7 @@ async function bootstrap() {
       'X-CSRF-Token',
       'X-HTTP-Method-Override',
       'X-Request-Id',
+      'X-Video-Render-Token',
     ],
     exposedHeaders: ['X-Request-Id'],
   });

@@ -51,6 +51,8 @@
 | `ADMIN_USERNAME` | 管理账号 | 不使用默认值 |
 | `ADMIN_PASSWORD_HASH` | `npm run auth:hash-password` 生成的 scrypt 哈希 | 不填写明文密码 |
 | `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | 微信登录凭据，必须成对配置 | 仅放服务端 Secret 配置 |
+| `DESIGN_PROCESS_VIDEO_ENABLED` | 过程视频开关，完成专项验收前保持关闭 | `false` |
+| `VIDEO_WEB_RENDER_URL` | 启用过程视频时必填的 H5 设计页绝对 URL | `https://app.example.com/#/pages/design/design` |
 | `DB_SSL_MODE` | 跨主机 PostgreSQL 建议使用 | `verify-full` |
 | `DB_SSL_CA_PATH` | 云数据库 CA 的只读挂载路径 | 由数据库平台提供 |
 | `DB_SSL_CA` | 无法挂载 CA 文件时使用的 PEM 文本 | 可用 `\n` 表示换行 |
@@ -126,3 +128,4 @@ API_BASE=http://127.0.0.1:3008 npm run smoke:production
 4. **端口**：Dockerfile 中已设置 `PORT=80`，与微信云托管默认容器端口一致，无需在控制台再改监听端口（除非你自定义了端口）。
 5. **交易边界**：当前没有微信支付，订单是客服确认后的人工履约流程；支付接入和商户配置完成前不得把提交成功展示为“已支付”。
 6. **运行手册**：发布、备份、隔离恢复、监控和回滚步骤见 [`docs/OPERATIONS.md`](./docs/OPERATIONS.md)。
+7. **过程视频**：默认关闭。该任务依赖 Chromium、FFmpeg、H5 渲染页和持久存储，且当前任务恢复只支持单执行实例。启用前先手动生成一条短视频并验证重启恢复、文件下载和资源上限，再同步开启前端入口。

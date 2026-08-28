@@ -92,6 +92,8 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
     30 * 24 * 60 * 60,
     'USER_SESSION_TTL_SECONDS',
   );
+  const designProcessVideoEnabled = parseBoolean(env.DESIGN_PROCESS_VIDEO_ENABLED, false);
+  env.DESIGN_PROCESS_VIDEO_ENABLED = designProcessVideoEnabled;
 
   parseTrustProxy(env.TRUST_PROXY);
   const corsOrigins = parseCorsOrigins(env.CORS_ORIGINS);
@@ -112,6 +114,19 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
     throw new Error('UPLOAD_STORAGE_MODE must be ephemeral or persistent');
   }
   env.UPLOAD_STORAGE_MODE = uploadStorageMode;
+
+  if (designProcessVideoEnabled) {
+    const renderUrl = text(env.VIDEO_WEB_RENDER_URL);
+    let parsedRenderUrl: URL;
+    try {
+      parsedRenderUrl = new URL(renderUrl);
+    } catch {
+      throw new Error('VIDEO_WEB_RENDER_URL must be an absolute HTTP(S) URL when video rendering is enabled');
+    }
+    if (!['http:', 'https:'].includes(parsedRenderUrl.protocol)) {
+      throw new Error('VIDEO_WEB_RENDER_URL must be an absolute HTTP(S) URL when video rendering is enabled');
+    }
+  }
 
   const databaseType = text(env.DB_TYPE) || text(env.REMOTE_DB_TYPE) || 'postgres';
   const databaseSslMode = text(env.DB_SSL_MODE).toLowerCase() || 'disable';
@@ -144,7 +159,6 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
   if (uploadStorageMode !== 'persistent') {
     throw new Error('Production requires UPLOAD_STORAGE_MODE=persistent and a durable UPLOAD_DIR mount');
   }
-
   const adminUsername = text(env.ADMIN_USERNAME);
   const adminPasswordHash = text(env.ADMIN_PASSWORD_HASH);
   if (!/^[A-Za-z0-9._@-]{3,64}$/.test(adminUsername)) {
