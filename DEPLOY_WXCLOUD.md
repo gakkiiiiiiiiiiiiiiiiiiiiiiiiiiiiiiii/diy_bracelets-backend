@@ -45,6 +45,7 @@
 | `DB_PASSWORD` | 数据库密码 | 你的密码 |
 | `DB_DATABASE` | 数据库名 | `diy_bracelets` |
 | `UPLOAD_DIR` | 上传文件目录（仅在服务提供持久卷时使用） | `/app/uploads` |
+| `UPLOAD_STORAGE_MODE` | 已确认目录是持久存储；生产必须填写 | `persistent` |
 | `CORS_ORIGINS` | 管理端/H5 的明确 HTTPS Origin，禁止 `*` | `https://admin.example.com` |
 | `CORS_ALLOW_CREDENTIALS` | 管理端 Cookie 会话必需 | `true` |
 | `ADMIN_USERNAME` | 管理账号 | 不使用默认值 |
@@ -93,12 +94,19 @@ CLI 会按 `wxcloud.config.js` 中的 `server.port`（80）和 `dockerfile` 路�
 cd backend
 docker build -t diy-bracelets-api .
 # 按需传入数据库等环境变量
-docker run --rm -p 3008:80 \
+docker run --rm -p 3008:80 -v diy-bracelets-uploads:/app/uploads \
   -e DB_HOST=host.docker.internal \
   -e DB_PORT=5432 \
-  -e DB_USERNAME=postgres \
-  -e DB_PASSWORD=postgres \
+  -e DB_USERNAME=bracelets \
+  -e DB_PASSWORD='<strong-random-password>' \
   -e DB_DATABASE=diy_bracelets \
+  -e UPLOAD_STORAGE_MODE=persistent \
+  -e CORS_ORIGINS=https://admin.example.com \
+  -e CORS_ALLOW_CREDENTIALS=true \
+  -e ADMIN_USERNAME=production-admin \
+  -e ADMIN_PASSWORD_HASH='<generated-scrypt-hash>' \
+  -e WECHAT_APP_ID=wx1234567890abcdef \
+  -e WECHAT_APP_SECRET='<32-hex-secret>' \
   diy-bracelets-api
 ```
 
@@ -113,7 +121,7 @@ API_BASE=http://127.0.0.1:3008 npm run smoke:production
 ## 四、注意事项
 
 1. **数据库**：云托管仅运行容器，不提供 PostgreSQL。请使用腾讯云 PostgreSQL、云开发扩展或其它可被云托管访问的数据库，并在环境变量中正确配置。
-2. **上传目录**：云容器内 `uploads` 通常是临时目录，重启或扩容后可能丢失/分叉。正式启用上传前必须选择持久卷或对象存储。对象存储属于按量计费资源，需先审批费用与请求架构，禁止用高频逐对象 HEAD 扫描。
+2. **上传目录**：云容器内 `uploads` 通常是临时目录，重启或扩容后可能丢失/分叉。服务会要求生产环境设置 `UPLOAD_STORAGE_MODE=persistent`，但该声明不能替代真实的持久卷挂载。正式启用上传前必须选择持久卷或对象存储。对象存储属于按量计费资源，需先审批费用与请求架构，禁止用高频逐对象 HEAD 扫描。
 3. **migration**：生产启动会自动运行受版本控制的 migration，绝不能临时改成 `development` 或依赖 `synchronize` 建表。首次升级先单实例执行并确认成功，再扩容。
 4. **端口**：Dockerfile 中已设置 `PORT=80`，与微信云托管默认容器端口一致，无需在控制台再改监听端口（除非你自定义了端口）。
 5. **交易边界**：当前没有微信支付，订单是客服确认后的人工履约流程；支付接入和商户配置完成前不得把提交成功展示为“已支付”。

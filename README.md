@@ -44,7 +44,7 @@ npm run start:dev
 
 ```bash
 cp .env.example .env
-# 必须修改 DB_PASSWORD、CORS_ORIGINS，并配置管理端账号和密码哈希
+# 必须修改 DB_PASSWORD、CORS_ORIGINS，配置管理端密码哈希和微信 AppID/Secret
 # 安全读取密码并生成哈希（密码不会写入 shell 历史）：
 read -s "ADMIN_PASSWORD?Admin password: "
 printf %s "$ADMIN_PASSWORD" | npm run --silent auth:hash-password
@@ -72,6 +72,8 @@ docker compose up -d --build
 | `DB_SSL_CA_PATH` | - | `verify-full` 时必填的只读 CA 证书路径 |
 | `DB_SSL_CA` | - | 无法挂载文件时使用的 PEM CA 文本，可用 `\n` 表示换行 |
 | `PORT` | 3000 | API 端口 |
+| `UPLOAD_DIR` | ./uploads | 上传、提取、渲染产物目录 |
+| `UPLOAD_STORAGE_MODE` | ephemeral | 生产必须设为 `persistent`，并真实挂载持久卷 |
 | `CORS_ORIGINS` | - | 生产必填，逗号分隔的前端/管理端 Origin，禁止 `*` |
 | `CORS_ALLOW_CREDENTIALS` | true | 生产必须开启，用于管理端 HttpOnly 会话 Cookie |
 | `TRUST_PROXY` | false | 代理跳数或命名子网；禁止直接配置为 `true` |
@@ -81,7 +83,7 @@ docker compose up -d --build
 | `ADMIN_PASSWORD_HASH` | - | 生产必填，由 `npm run auth:hash-password` 生成的 scrypt 哈希 |
 | `ADMIN_SESSION_TTL_SECONDS` | 28800 | 管理端可撤销会话有效期 |
 | `ADMIN_COOKIE_SAME_SITE` | strict | 管理端 Cookie 的 SameSite 策略；跨站部署才改为 `none` |
-| `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | - | 微信小程序登录配置，必须成对配置且仅保存在后端 |
+| `WECHAT_APP_ID` / `WECHAT_APP_SECRET` | - | 生产必填的微信小程序登录配置，仅保存在后端 |
 | `USER_SESSION_TTL_SECONDS` | 2592000 | 微信用户自定义登录态有效期 |
 | `OPENAI_API_KEY` | - | 水晶识别、Imagegen 提取与图片参考搭配所需密钥 |
 | `OPENAI_VISION_MODEL` | gpt-5-mini | 视觉识别与结构化搭配模型 |
@@ -115,6 +117,8 @@ docker compose up -d --build
 - 管理订单：`GET /api/admin/orders`、`PATCH /api/admin/orders/:id/status`；发货必须提供承运方和物流单号
 
 下单使用用户级幂等键防止重复订单，并在同一数据库事务中保存价格/地址/商品快照、移除已结算购物车项目。客户端提交的价格、名称和金额不会作为结算依据。当前订单是“客服确认后制作”的人工履约流程，不包含在线支付；接入微信支付前不得在客户端展示“已付款”。
+
+基线 migration 会把随小程序交付的 39 种参考晶石目录写入数据库；只插入缺失 ID，不覆盖管理员已有修改。小程序只展示后端已发布且可用的材料、规格与价格，前端本地贴图仅参与渲染，不再充当可售目录。
 
 订单地址快照包含个人信息。生产数据库、备份和运维账号必须启用静态加密、最小权限与访问审计，日志不得输出完整地址、手机号、会话令牌或微信凭据。
 

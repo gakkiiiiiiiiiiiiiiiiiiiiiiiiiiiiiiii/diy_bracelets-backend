@@ -11,6 +11,9 @@ const secureAuth = {
   CORS_ALLOW_CREDENTIALS: 'true',
   ADMIN_USERNAME: 'production-admin',
   ADMIN_PASSWORD_HASH: hashAdminPassword('a-secure-admin-password'),
+  WECHAT_APP_ID: 'wx1234567890abcdef',
+  WECHAT_APP_SECRET: '1234567890abcdef1234567890abcdef',
+  UPLOAD_STORAGE_MODE: 'persistent',
 };
 
 test('production configuration rejects an open or missing CORS policy', () => {
@@ -44,6 +47,30 @@ test('production configuration rejects unsafe database defaults', () => {
   );
 });
 
+test('production configuration requires WeChat credentials and durable upload storage', () => {
+  const base = {
+    NODE_ENV: 'production',
+    CORS_ORIGINS: 'https://admin.example.com',
+    CORS_ALLOW_CREDENTIALS: 'true',
+    ADMIN_USERNAME: secureAuth.ADMIN_USERNAME,
+    ADMIN_PASSWORD_HASH: secureAuth.ADMIN_PASSWORD_HASH,
+    DB_HOST: 'database',
+    DB_USERNAME: 'app',
+    DB_PASSWORD: 'a-long-random-password',
+    DB_DATABASE: 'bracelets',
+  };
+
+  assert.throws(() => validateEnvironment(base), /valid WECHAT_APP_ID/);
+  assert.throws(
+    () => validateEnvironment({
+      ...base,
+      WECHAT_APP_ID: secureAuth.WECHAT_APP_ID,
+      WECHAT_APP_SECRET: secureAuth.WECHAT_APP_SECRET,
+    }),
+    /UPLOAD_STORAGE_MODE=persistent/,
+  );
+});
+
 test('production configuration accepts explicit secure settings', () => {
   const result = validateEnvironment({
     NODE_ENV: 'production',
@@ -60,6 +87,7 @@ test('production configuration accepts explicit secure settings', () => {
   assert.equal(result.PORT, 3008);
   assert.equal(result.DB_POOL_MAX, 10);
   assert.equal(result.DB_SSL_MODE, 'disable');
+  assert.equal(result.UPLOAD_STORAGE_MODE, 'persistent');
   assert.deepEqual(
     parseCorsOrigins(result.CORS_ORIGINS),
     ['https://app.example.com', 'https://admin.example.com'],

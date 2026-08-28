@@ -45,6 +45,7 @@ services:
       DB_SSL_CA_PATH: ${DB_SSL_CA_PATH:-}
       DB_SSL_CA: ${DB_SSL_CA:-}
       UPLOAD_DIR: /app/uploads
+      UPLOAD_STORAGE_MODE: persistent
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS to the comma-separated production frontend origins}
       CORS_ALLOW_CREDENTIALS: "true"
       TRUST_PROXY: ${TRUST_PROXY:-loopback}
@@ -55,8 +56,8 @@ services:
       ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
       ADMIN_COOKIE_SECURE: "true"
       ADMIN_COOKIE_SAME_SITE: ${ADMIN_COOKIE_SAME_SITE:-strict}
-      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
-      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:?Set WECHAT_APP_ID}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:?Set WECHAT_APP_SECRET}
       USER_SESSION_TTL_SECONDS: ${USER_SESSION_TTL_SECONDS:-2592000}
       CHROME_PATH: /usr/bin/chromium-browser
       FFMPEG_PATH: /usr/bin/ffmpeg

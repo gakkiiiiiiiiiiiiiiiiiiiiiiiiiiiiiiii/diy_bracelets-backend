@@ -101,6 +101,9 @@ test('production server migrates an empty database and enforces HTTP safeguards'
       ADMIN_USERNAME: 'production-admin',
       ADMIN_PASSWORD_HASH: hashAdminPassword(adminPassword),
       ADMIN_COOKIE_SECURE: 'true',
+      WECHAT_APP_ID: 'wx1234567890abcdef',
+      WECHAT_APP_SECRET: '1234567890abcdef1234567890abcdef',
+      UPLOAD_STORAGE_MODE: 'persistent',
       TRUST_PROXY: 'false',
       RATE_LIMIT_MAX: '100',
       DB_CONNECT_RETRIES: '1',
@@ -191,6 +194,12 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     const publicContentBody = await publicContent.json();
     assert.equal('draftContent' in publicContentBody, false);
 
+    const publicMaterials = await fetch(`${baseUrl}/api/materials`);
+    assert.equal(publicMaterials.status, 200);
+    const referenceMaterial = (await publicMaterials.json()).find((row) => row.id === 'source-clear-quartz');
+    assert.equal(referenceMaterial.specs[0].specId, 'source-clear-quartz-6mm-0');
+    assert.equal(referenceMaterial.specs[0].price, 3);
+
     const firstUserToken = await seedUserSession(databasePath, '11111111-1111-4111-8111-111111111111');
     const secondUserToken = await seedUserSession(databasePath, '22222222-2222-4222-8222-222222222222');
 
@@ -216,6 +225,33 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     });
     assert.equal(secondProfile.status, 200);
     assert.equal((await secondProfile.json()).name, '珠岛用户');
+
+    const customCatalogCart = await fetch(`${baseUrl}/api/cart`, {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${firstUserToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        items: [{
+          clientItemId: 'custom-reference-catalog-smoke',
+          kind: 'custom',
+          name: '客户端名称不参与计价',
+          qty: 1,
+          composition: [{
+            materialId: 'source-clear-quartz',
+            specId: 'source-clear-quartz-6mm-0',
+            size: 99,
+            quantity: 2,
+          }],
+        }],
+      }),
+    });
+    assert.equal(customCatalogCart.status, 200);
+    const canonicalCustomItem = (await customCatalogCart.json()).items[0];
+    assert.equal(canonicalCustomItem.price, 6);
+    assert.equal(canonicalCustomItem.composition[0].size, 6);
+    assert.equal(canonicalCustomItem.composition[0].price, 3);
 
     const createdDesign = await fetch(`${baseUrl}/api/my-designs`, {
       method: 'POST',
@@ -405,7 +441,12 @@ test('production server migrates an empty database and enforces HTTP safeguards'
 
     assert.deepEqual(
       await migrationNames(databasePath),
-      ['InitialSchema1787884800000', 'AuthAndOwnership1787971200000', 'Commerce1788057600000'],
+      [
+        'InitialSchema1787884800000',
+        'AuthAndOwnership1787971200000',
+        'Commerce1788057600000',
+        'SeedReferenceCatalog1788144000000',
+      ],
     );
   } finally {
     child.kill('SIGTERM');

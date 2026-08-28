@@ -107,6 +107,12 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
     throw new Error('WECHAT_APP_ID and WECHAT_APP_SECRET must be configured together');
   }
 
+  const uploadStorageMode = text(env.UPLOAD_STORAGE_MODE).toLowerCase() || 'ephemeral';
+  if (!['ephemeral', 'persistent'].includes(uploadStorageMode)) {
+    throw new Error('UPLOAD_STORAGE_MODE must be ephemeral or persistent');
+  }
+  env.UPLOAD_STORAGE_MODE = uploadStorageMode;
+
   const databaseType = text(env.DB_TYPE) || text(env.REMOTE_DB_TYPE) || 'postgres';
   const databaseSslMode = text(env.DB_SSL_MODE).toLowerCase() || 'disable';
   if (!['disable', 'require', 'verify-full'].includes(databaseSslMode)) {
@@ -127,6 +133,16 @@ export function validateEnvironment(raw: Record<string, unknown>): Record<string
   }
   if (!parseBoolean(env.CORS_ALLOW_CREDENTIALS, false)) {
     throw new Error('CORS_ALLOW_CREDENTIALS=true is required for admin sessions in production');
+  }
+
+  if (!/^wx[a-f0-9]{16}$/i.test(wechatAppId)) {
+    throw new Error('Production requires a valid WECHAT_APP_ID');
+  }
+  if (!/^[a-f0-9]{32}$/i.test(wechatAppSecret)) {
+    throw new Error('Production requires a valid WECHAT_APP_SECRET');
+  }
+  if (uploadStorageMode !== 'persistent') {
+    throw new Error('Production requires UPLOAD_STORAGE_MODE=persistent and a durable UPLOAD_DIR mount');
   }
 
   const adminUsername = text(env.ADMIN_USERNAME);

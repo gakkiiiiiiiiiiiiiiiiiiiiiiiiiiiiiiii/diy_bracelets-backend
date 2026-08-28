@@ -7,8 +7,9 @@
 1. 使用 Node.js 24，执行 `npm ci && npm test && npm audit --omit=dev --audit-level=moderate`。
 2. 使用独立生产数据库账号，不使用超级用户；限制来源网络，并在跨主机连接时配置 `DB_SSL_MODE=verify-full` 与只读 CA 文件。
 3. 确认 `CORS_ORIGINS`、管理账号哈希、微信 AppID/Secret、Cookie 策略和代理跳数均为目标环境值。
-4. 发布前执行一次手工备份，并记录备份文件、SHA-256、数据库版本和恢复演练日期。
-5. 首次运行 migration 时只启动一个 API 实例；确认 migration 和 `/health/ready` 成功后再扩容，避免多个新实例竞争迁移。
+4. 将 `UPLOAD_DIR` 挂载到已备份的持久卷，并设置 `UPLOAD_STORAGE_MODE=persistent`；该变量是部署责任确认，不会自动把临时目录变成持久存储。
+5. 发布前执行一次手工备份，并记录备份文件、SHA-256、数据库版本和恢复演练日期。
+6. 首次运行 migration 时只启动一个 API 实例；确认 migration 和 `/health/ready` 成功后再扩容，避免多个新实例竞争迁移。
 
 ## 发布与回滚
 
@@ -56,6 +57,6 @@ DB_HOST=... DB_USERNAME=... DB_PASSWORD=... DB_DATABASE=production_name \
 ## 已知上线边界
 
 - 当前没有微信支付，订单是客服确认的人工履约单，不能宣传为“已支付订单”。
-- 云容器的本地上传目录可能随重启丢失。正式启用多实例前必须选择持久卷或对象存储；对象存储属于按量计费资源，需单独审批、预算和请求量设计。
+- 云容器的本地上传目录可能随重启丢失。服务现在会拒绝以 `UPLOAD_STORAGE_MODE=ephemeral` 启动生产模式，但运维仍必须确保 `UPLOAD_DIR` 确实挂载到持久卷。正式启用多实例前还需选择共享存储或对象存储；对象存储属于按量计费资源，需单独审批、预算和请求量设计。
 - H5 当前是演示构建，不具备生产用户登录和跨设备交易能力。
 - 真实发布仍需微信 AppID/Secret、合法 HTTPS 域名、真机登录及下单验收。
