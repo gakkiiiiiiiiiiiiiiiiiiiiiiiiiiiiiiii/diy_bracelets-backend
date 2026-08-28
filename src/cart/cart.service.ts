@@ -108,6 +108,7 @@ export class CartService {
       const unitPriceCents = Math.round(Number(spec.price) * 100);
       return {
         materialId: material.id,
+        specId: spec.specId,
         name: material.name,
         image: material.image,
         size: Number(spec.size),

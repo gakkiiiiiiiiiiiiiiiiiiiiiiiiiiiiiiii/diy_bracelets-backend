@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Update
 
 export interface CartCompositionSnapshot {
   materialId: string;
+  specId: string;
   name: string;
   image: string;
   size: number;

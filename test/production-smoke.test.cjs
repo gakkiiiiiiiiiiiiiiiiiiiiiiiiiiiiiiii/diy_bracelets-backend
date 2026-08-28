@@ -330,6 +330,7 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     assert.equal(customCatalogCart.status, 200);
     const canonicalCustomItem = (await customCatalogCart.json()).items[0];
     assert.equal(canonicalCustomItem.price, 6);
+    assert.equal(canonicalCustomItem.composition[0].specId, 'source-clear-quartz-6mm-0');
     assert.equal(canonicalCustomItem.composition[0].size, 6);
     assert.equal(canonicalCustomItem.composition[0].price, 3);
 
@@ -459,7 +460,18 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     const orderPayload = {
       addressId: address.id,
       idempotencyKey: 'smoke-order-key-0001',
-      items: [cartItem],
+      items: [cartItem, {
+        clientItemId: 'custom-reference-catalog-order-smoke',
+        kind: 'custom',
+        name: '客户端名称不参与计价',
+        qty: 1,
+        composition: [{
+          materialId: 'source-clear-quartz',
+          specId: 'source-clear-quartz-6mm-0',
+          size: 99,
+          quantity: 2,
+        }],
+      }],
       cartItemIds: [cartItem.clientItemId],
       note: '服务端重新计价',
     };
@@ -473,8 +485,12 @@ test('production server migrates an empty database and enforces HTTP safeguards'
     });
     assert.equal(createdOrder.status, 201);
     const order = await createdOrder.json();
-    assert.equal(order.total, 560);
+    assert.equal(order.total, 566);
     assert.equal(order.statusCode, 'pending_confirmation');
+    const orderedCustomItem = order.items.find((item) => item.kind === 'custom');
+    assert.equal(orderedCustomItem.composition[0].specId, 'source-clear-quartz-6mm-0');
+    assert.equal(orderedCustomItem.composition[0].size, 6);
+    assert.equal(orderedCustomItem.composition[0].price, 3);
 
     const retriedOrder = await fetch(`${baseUrl}/api/orders`, {
       method: 'POST',
