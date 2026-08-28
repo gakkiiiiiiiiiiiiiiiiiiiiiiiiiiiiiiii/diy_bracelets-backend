@@ -19,6 +19,7 @@ import { parseBoolean } from '../config/environment';
 export class BraceletAgentService implements OnModuleInit {
   private readonly logger = new Logger(BraceletAgentService.name);
   private queue: Promise<void> = Promise.resolve();
+  private admissionQueue: Promise<void> = Promise.resolve();
   private readonly enabled: boolean;
 
   constructor(
@@ -44,7 +45,13 @@ export class BraceletAgentService implements OnModuleInit {
     }
   }
 
-  async create(dto: CreateAgentGenerationDto): Promise<AgentGeneration> {
+  create(dto: CreateAgentGenerationDto): Promise<AgentGeneration> {
+    const task = this.admissionQueue.then(() => this.createOne(dto));
+    this.admissionQueue = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  private async createOne(dto: CreateAgentGenerationDto): Promise<AgentGeneration> {
     if (!this.enabled) throw new ServiceUnavailableException('搭配 Agent 默认关闭，请由运维显式设置 BRACELET_AGENT_ENABLED=true');
     if (!dto.referenceImage && !dto.colors?.length) throw new BadRequestException('请上传参考图片或至少选择一种颜色');
     if (!this.ai.configured) throw new ServiceUnavailableException('本地 Codex CLI 不可用，请检查 CODEX_CLI_PATH');

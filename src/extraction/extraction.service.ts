@@ -16,6 +16,7 @@ import { parseBoolean } from '../config/environment';
 export class ExtractionService implements OnModuleInit {
   private readonly logger = new Logger(ExtractionService.name);
   private queue: Promise<void> = Promise.resolve();
+  private admissionQueue: Promise<void> = Promise.resolve();
   private readonly enabled: boolean;
 
   constructor(
@@ -43,7 +44,17 @@ export class ExtractionService implements OnModuleInit {
     }
   }
 
-  async create(dto: CreateExtractionJobDto): Promise<ExtractionJob> {
+  private admit<T>(work: () => Promise<T>): Promise<T> {
+    const task = this.admissionQueue.then(work);
+    this.admissionQueue = task.then(() => undefined, () => undefined);
+    return task;
+  }
+
+  create(dto: CreateExtractionJobDto): Promise<ExtractionJob> {
+    return this.admit(() => this.createOne(dto));
+  }
+
+  private async createOne(dto: CreateExtractionJobDto): Promise<ExtractionJob> {
     this.assertReady();
     const sourceRefs = [...new Set(dto.sourceRefs?.filter(Boolean) ?? [])];
     if (!sourceRefs.length) throw new BadRequestException('请先上传需要提取的手串图片');
@@ -258,7 +269,11 @@ export class ExtractionService implements OnModuleInit {
     await this.jobs.save(job);
   }
 
-  async retry(resultId: string): Promise<ExtractionResult> {
+  retry(resultId: string): Promise<ExtractionResult> {
+    return this.admit(() => this.retryOne(resultId));
+  }
+
+  private async retryOne(resultId: string): Promise<ExtractionResult> {
     this.assertReady();
     const result = await this.results.findOne({ where: { id: resultId } });
     if (!result) throw new NotFoundException('提取结果不存在');
